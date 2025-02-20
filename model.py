@@ -272,6 +272,7 @@ class YOLOV3(object):
 
         recovery_loss = tf.reduce_sum(tf.pow(filtered_image_batch - input_data_clean, 2.0))  # /(2.0 * batch_size)
 
+        # 网络部分
         input_data = filtered_image_batch
         route_1, route_2, input_data = darknet53(input_data, self.trainable)
 

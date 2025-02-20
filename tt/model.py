@@ -118,7 +118,7 @@ class Neck(nn.Module):
         return x
 
 class SubNet(nn.Module):
-    def __init__(self, input_channels=3, cfg=cfg):
+    def __init__(self,  cfg=cfg):
         super(SubNet, self).__init__()
         self.output_dim = cfg.num_filter_parameters
         channels = 6
@@ -126,7 +126,7 @@ class SubNet(nn.Module):
         # 卷积层定义
         self.conv_layers = nn.Sequential(
             # 第0层: 3x3 卷积，输入通道3，输出通道16，下采样
-            nn.Conv2d(input_channels, channels, kernel_size=3, stride=2, padding=1, bias=False),
+            nn.Conv2d(3, channels, kernel_size=3, stride=2, padding=1, bias=False),
             nn.LeakyReLU(0.1, inplace=True),
 
             # 第1层: 3x3 卷积，通道数翻倍
@@ -176,28 +176,40 @@ class SubNet(nn.Module):
 
 # YOLOv3 Model
 class YOLOV3(nn.Module):
-    def __init__(self, num_classes, anchors, strides, input_size=416, isp_flag=False):
+    def __init__(self, num_class, anchors, strides, input_size=416, isp_flag=False):
         super(YOLOV3, self).__init__()
-        self.num_classes = num_classes
+        self.num_class = num_class
         self.anchors = anchors
         self.strides = strides
         self.isp_flag = isp_flag
-
-        # 这里需要根据TensorFlow结构实现各层模块
-        # 包括darknet53 backbone和多尺度检测头
-
-        # 示例结构：
+        # backbone
         self.darknet = Darknet53()
-        self.neck = Neck()
+        # neck
+        self.conv_lbranch = nn.Sequential(
+            DBL(1024, 512, 1),
+            DBL(512, 1024),
+            DBL(1024, 512, 1),
+            DBL(512, 1024),
+            DBL(1024, 512, 1),)
+        self.branch = DBL(512, 1024)
+        self.conv_lbox = nn.Conv2d(1024, 3 * (self.num_class + 5), 1)
+
+
+        self.conv_mbranch = nn.Sequential(
+
+        )
+
+        # head
+
         self.head_s = DetectionHead(256, len(anchors[0]), num_classes)
         self.head_m = DetectionHead(256, len(anchors[0]), num_classes)
         self.head_l = DetectionHead(256, len(anchors[0]), num_classes)
-        # 类似实现其他检测头
 
-    def forward(self, input_processed, input_clean):
+        # 类似实现其他检测头
+    def _filtered(self, input_processed, input_clean):
         # 实现前向传播逻辑, 定义微调的子网络
         # 这里处理的都是batch
-        # 下面这行不知道再干什么？
+
         self.filter_params = input_processed
         filtered_pipline = []
 
@@ -219,9 +231,18 @@ class YOLOV3(nn.Module):
 
             self.filter_params = filters_parameters
         self.image_filtered = input_processed
+        self.filtered_pipline = filtered_pipline
 
-        # Darknet53 backbone
-        route_1, route_2, x = self.darknet(input_processed)
+        recovery_loss = torch.sum((self.image_filtered - input_clean) ** 2.0)
+
+        return self.image_filtered, self.filtered_pipline, recovery_loss
+
+    def forward(self, x, input_clean):
+        # 滤波操作
+        self.image_filtered, self.filtered_pipline, recovery_loss = self._filtered(x, input_clean)
+
+        # backbone
+        route_1, route_2, x = self.darknet(self.image_filtered)
 
         # 多尺度检测头
         out_s = self.head_s(x)
