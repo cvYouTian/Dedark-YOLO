@@ -190,17 +190,18 @@ class YOLOV3(nn.Module):
             DBL(512, 1024),
             DBL(1024, 512, 1),
             DBL(512, 1024),
-            DBL(1024, 512, 1),)
-        self.branch = DBL(512, 1024)
-        self.conv_lbox = nn.Conv2d(1024, 3 * (self.num_class + 5), 1)
+            DBL(1024, 512, 1))
 
+        self.conv_lbox = nn.Sequential(
+            DBL(512, 1024),
+            nn.Conv2d(1024, 3 * (self.num_class + 5), 1))
 
         self.conv_mbranch = nn.Sequential(
-
+            DBL(512, 256, 1),
+            nn.Upsample(scale_factor=2, mode='bilinear'),
         )
 
         # head
-
         self.head_s = DetectionHead(256, len(anchors[0]), num_classes)
         self.head_m = DetectionHead(256, len(anchors[0]), num_classes)
         self.head_l = DetectionHead(256, len(anchors[0]), num_classes)
@@ -240,9 +241,15 @@ class YOLOV3(nn.Module):
     def forward(self, x, input_clean):
         # 滤波操作
         self.image_filtered, self.filtered_pipline, recovery_loss = self._filtered(x, input_clean)
-
         # backbone
         route_1, route_2, x = self.darknet(self.image_filtered)
+        # neck
+        x = self.conv_lbranch(x)
+        l_box = self.conv_lbox(x)
+
+        x = self.conv_mbranch(x)
+        x = torch.concat([route_2, x], 1)
+
 
         # 多尺度检测头
         out_s = self.head_s(x)
