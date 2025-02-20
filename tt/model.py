@@ -72,7 +72,6 @@ class resn(nn.Module):
         x = self.res(x)
         return x
 
-
 class Darknet53(nn.Module):
     def __init__(self):
         super(Darknet53, self).__init__()
@@ -105,17 +104,6 @@ class Darknet53(nn.Module):
         out_put = self.res5(x)
 
         return route_1, route_2, out_put
-
-class Neck(nn.Module):
-    def __init__(self, ic, mc, oc):
-        super(Neck, self).__init__()
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.res1(x)
-
-        return x
 
 class SubNet(nn.Module):
     def __init__(self,  cfg=cfg):
@@ -196,9 +184,36 @@ class YOLOV3(nn.Module):
             DBL(512, 1024),
             nn.Conv2d(1024, 3 * (self.num_class + 5), 1))
 
-        self.conv_mbranch = nn.Sequential(
+        self.l_upsample = nn.Sequential(
             DBL(512, 256, 1),
             nn.Upsample(scale_factor=2, mode='bilinear'),
+        )
+        self.conv_mbranch = nn.Sequential(
+            DBL(768, 256, 1),
+            DBL(256, 512),
+            DBL(512, 256, 1),
+            DBL(256, 512),
+            DBL(512, 256, 1),
+        )
+        self.m_upsample = nn.Sequential(
+            DBL(256, 128, 1),
+            nn.Upsample(scale_factor=2, mode='bilinear'),
+        )
+        self.conv_mbox = nn.Sequential(
+            DBL(256, 512),
+            nn.Conv2d(512, 3 * (self.num_class + 5), 1)
+        )
+
+        self.conv_sbranch = nn.Sequential(
+            DBL(384, 128, 1),
+            DBL(128, 256),
+            DBL(256, 128, 1),
+            DBL(128, 256),
+            DBL(256, 128, 1)
+        )
+        self.conv_sbox = nn.Sequential(
+            DBL(128, 256),
+            nn.Conv2d(256, 3 * (self.num_class + 5), 1)
         )
 
         # head
@@ -240,21 +255,29 @@ class YOLOV3(nn.Module):
 
     def forward(self, x, input_clean):
         # 滤波操作
-        self.image_filtered, self.filtered_pipline, recovery_loss = self._filtered(x, input_clean)
+        image_filtered, filtered_pipline, recovery_loss = self._filtered(x, input_clean)
         # backbone
-        route_1, route_2, x = self.darknet(self.image_filtered)
+        route_1, route_2, x = self.darknet(image_filtered)
         # neck
         x = self.conv_lbranch(x)
         l_box = self.conv_lbox(x)
 
-        x = self.conv_mbranch(x)
+        x = self.l_upsample(x)
         x = torch.concat([route_2, x], 1)
+        x = self.conv_mbranch(x)
+        m_box = self.conv_mbox(x)
 
+        x = self.m_upsample(x)
+        x = torch.concat([route_1, x], 1)
+
+        x = self.conv_sbranch(x)
+        s_box = self.conv_sbox(x)
 
         # 多尺度检测头
-        out_s = self.head_s(x)
-        out_m = self.head_m(x)
-        out_l = self.head_l(x)
+        # out_s = self.head_s(x)
+        # out_m = self.head_m(x)
+        # out_l = self.head_l(x)
 
-        return out_s, out_m, out_l
+        return l_box, m_box, s_box, recovery_loss
+
 
