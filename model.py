@@ -252,12 +252,14 @@ class YOLOV3(object):
             #不是串联
             filters = [x(input_data, cfg) for x in filters]
             filter_parameters = []
+
             for j, filter in enumerate(filters):
                 with tf.variable_scope('filter_%d' % j):
                     print('    creating filter:', j, 'name:', str(filter.__class__), 'abbr.',
                           filter.get_short_name())
                     print('      filter_features:', filter_features.shape)
 
+                    # 这里每个滤波器是离散的，都是对input_process进行处理
                     filtered_image_batch, filter_parameter = filter.apply(
                         filtered_image_batch, filter_features)
                     filter_parameters.append(filter_parameter)

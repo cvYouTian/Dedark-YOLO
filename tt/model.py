@@ -18,6 +18,7 @@ from config_lowlight import args, cfg
 from model import gpu_id
 
 
+# 写日志操作
 def write_mes(msg, log_name=None, show=True, mode='a'):
     get_end = lambda line: '' if line.endswith('\n') else '\n'
     if show:
@@ -193,24 +194,34 @@ class YOLOV3(nn.Module):
         self.head_l = DetectionHead(256, len(anchors[0]), num_classes)
         # 类似实现其他检测头
 
-    def forward(self, x, input_clean):
+    def forward(self, input_processed, input_clean):
         # 实现前向传播逻辑, 定义微调的子网络
+        # 这里处理的都是batch
+        # 下面这行不知道再干什么？
+        self.filter_params = input_processed
+        filtered_pipline = []
+
         if self.isp_flag:
-            # 实现ISP处理模块
-            input_data = F.interpolate(x, size=(256, 256), mode='bilinear', align_corners=False)
+            # 实现子网络处理模块
+            input_data = F.interpolate(input_processed, size=(256, 256), mode='bilinear', align_corners=False)
             fine_tune = SubNet(input_channels=3, cfg=cfg)(input_data)
 
-        # 白平衡等滤波器
-        filters = cfg.filters
-        filters = [filter(x) for filter in filters]
-        filters_parameters = []
+            # 白平衡等滤波器
+            filters = cfg.filters
+            filters = [filter(input_processed) for filter in filters]
+            filters_parameters = []
 
-        for i, filter in enumerate(filters):
-            # 传入一张处理后的图片和一张
-            filter.apply(x, )
+            for i, filter in enumerate(filters):
+                # 传入一张处理后的图片和一张
+                input_processed, filtered_param = filter.apply(input_processed, fine_tune)
+                filters_parameters.append(filtered_param)
+                filtered_pipline.append(input_processed)
+
+            self.filter_params = filters_parameters
+        self.image_filtered = input_processed
 
         # Darknet53 backbone
-        route_1, route_2, x = self.darknet(x)
+        route_1, route_2, x = self.darknet(input_processed)
 
         # 多尺度检测头
         out_s = self.head_s(x)
@@ -219,95 +230,3 @@ class YOLOV3(nn.Module):
 
         return out_s, out_m, out_l
 
-
-
-# class YOLOv3(nn.Module):
-#     def __init__(self, input_chanel=3):
-#         super(YOLOv3, self).__init__()
-#         pass
-#
-# class YoloTrian:
-#     def __init__(self, cfg=cfg):
-#         super(YoloTrian, self).__init__()
-#         # self.first_stage_epochs = cfg.TRAIN.FIRST_STAGE_EPOCHS
-#         self.first_stage_epochs = 0
-#         self.second_stage_epochs = cfg.TRAIN.SECOND_STAGE_EPOCHS
-#
-#         # 创建训练数据加载器
-#         self.trainset = DataLoader(
-#             dataset=CustomDataset("train", cfg),
-#             cfg_dataloader=train_cfg_dataloader,
-#             shuffle=True,
-#             is_train=True,
-#             distributed=False
-#         )
-#
-#         # 创建测试数据加载器
-#         self.testset = DataLoader(
-#             dataset=CustomDataset("test", cfg),
-#             cfg_dataloader=test_cfg_dataloader,
-#             shuffle=False,
-#             is_train=False,
-#             distributed=False
-#         )
-#
-#     def train(self):
-#         # 加载GPU
-#
-#         # # 将模型移动到设备
-#         #         model = YourModel().to(device)
-#         #         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-#         #         loss_fn = YourLossFunction()
-#
-#         # 循环训练
-#         for epoch in range(1, 1 + self.first_stage_epochs + self.second_stage_epochs):
-#             trian_loss = []
-#             test_loss = []
-#
-#             for data in self.trainset:
-#                 if args.lowlight_FLAG:
-#                     lowlight_param = random.uniform(5, 10)
-#
-#
-#
-#
-# if __name__ == '__main__':
-#     # 创建训练数据加载器的配置
-#     train_cfg_dataloader = CfgDataloader(
-#         batch_size=8,  # 指定批量大小
-#         num_workers=4,  # 指定工作进程数
-#         num_gpus=1,  # 指定 GPU 数量
-#         collect_fn=None  # 如果需要自定义 collate_fn，可以在这里指定
-#     )
-#
-#     # 创建测试数据加载器的配置
-#     test_cfg_dataloader = CfgDataloader(
-#         batch_size=4,  # 指定批量大小
-#         num_workers=2,  # 指定工作进程数
-#         num_gpus=1,  # 指定 GPU 数量
-#         collect_fn=None  # 如果需要自定义 collate_fn，可以在这里指定
-#     )
-#     # 使用cpu
-#     if args.use_gpu == 0:
-#         gpu_id = '-1'
-#     # 多gpu
-#     else:
-#         gpu_id = args.gpu_id
-#         gpu_list = list()
-#         gpu_ids = gpu_id.split(',')
-#         for i in range(len(gpu_ids)):
-#             gpu_list.append('/gpu:%d' % int(i))
-#     os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
-#
-#     exp_folder = os.path.join(args.exp_dir, 'exp_{}'.format(args.exp_num))
-#
-#     set_ckpt_dir = args.ckpt_dir
-#     args.ckpt_dir = os.path.join(exp_folder, set_ckpt_dir)
-#     if not os.path.exists(args.ckpt_dir):
-#         os.makedirs(args.ckpt_dir)
-#
-#     config_log = os.path.join(exp_folder, 'config.txt')
-#     arg_dict = args.__dict__
-#     msg = ['{}: {}\n'.format(k, v) for k, v in arg_dict.items()]
-#     write_mes(msg, config_log, mode='w')
-#
