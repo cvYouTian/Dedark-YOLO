@@ -25,19 +25,6 @@ def write_mes(msg, log_name=None, show=True, mode='a'):
             f.writelines(msg)
 
 
-# YOLO 模型定义（PyTorch 版本）
-# class YOLOv3(nn.Module):
-#     def __init__(self, num_classes, in_channels=3):
-#         super().__init__()
-#         # 定义网络结构...
-#         # 需要实现与 TensorFlow 版本对应的网络结构
-#         # 包括 Darknet-53 骨干网络和多尺度检测头
-#
-#     def forward(self, x):
-#         # 实现前向传播
-#         return sbbox, mbbox, lbbox, recovery  # 假设有恢复分支
-
-
 class YOLOTrainer:
     def __init__(self, args):
         # 初始化参数

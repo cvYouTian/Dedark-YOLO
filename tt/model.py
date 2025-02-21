@@ -1,18 +1,8 @@
 import torch
 import torch.nn as nn
-import os
 import numpy as np
 from utils import get_anchors
 import torch.nn.functional as F
-import tqdm
-from jieba.lac_small.predict import batch_size
-from modelscope.msdatasets.dataset_cls.custom_datasets import DataLoader
-
-from dataset import CustomDataset, CfgDataloader
-from ffmpeg import output
-from sympy.physics.vector import outer
-from torch.nn import init
-import math
 from config_lowlight import args, cfg
 
 
@@ -90,15 +80,13 @@ class DetectionHead(nn.Module):
     def __init__(self, num_class, anchors, stride):
         super(DetectionHead, self).__init__()
         self.num_class = num_class
-        # [3, 2]
-        self.anchors = anchors
-        # 3
         self.anchor_per_scale = len(anchors)
         self.stride = stride
+        self.anchors = anchors
 
-    def conv_shape(self, x):
-        # [b, c, w, h]
-        conv_shape = x.shape
+    def conv_shape(self, input_data):
+        # [b, c, h, w]
+        conv_shape = input_data.shape
         batch_size = conv_shape[0]
         output_height = conv_shape[2]
         output_width = conv_shape[3]
@@ -110,9 +98,11 @@ class DetectionHead(nn.Module):
         return batch_size, output_size
 
     def forward(self, x):
-        batch_size, output_size = self.conv_shape(x)
-        # [b, w, h, an, p]
-        x = x.view(batch_size, output_size, output_size, self.anchor_per_scale, 5 + self.num_class)
+        batch_size, size = self.conv_shape(x)
+        # [b, c, h, w] -> [b, h, w, c]
+        x = x.permute(0, 2, 3, 1).contiguous()
+        # [b, h, w, c] -> [b, h, w, an, p]
+        x = x.view(batch_size, size, size, self.anchor_per_scale, 5 + self.num_class)
 
         # 中心点坐标特征
         conv_raw_dxdy = x[:, :, :, :, 0:2]  # dx, dy
@@ -123,10 +113,23 @@ class DetectionHead(nn.Module):
         # 每个类别的概率特征
         conv_raw_prob = x[:, :, :, :, 5:]  # class probabilities
 
+        # 定义列矩阵（每一列都是从0开始）[size, size]
+        y = torch.arange(size, dtype=torch.float32).view(-1, 1).repeat(1, size)
+        # 定义行矩阵（每一行都是从0开始）[size, size]
+        x = torch.arange(size, dtype=torch.float32).view(1, -1).repeat(size, 1)
 
+        # 定义一个[b, size, size, an, 2]的特征网格
+        xy_grid = torch.stack([x, y], dim=-1)
+        xy_grid = xy_grid[None, :, :, None, :].repeat(batch_size, 1, 1, self.anchor_per_scale, 1)
 
+        pred_xy = (torch.sigmoid(conv_raw_dxdy) + xy_grid) * self.stride
+        pred_wh = (torch.exp(conv_raw_dwdh) * self.anchors) * self.stride
+        pred_xywh = torch.cat([pred_xy, pred_wh], dim=-1)
 
+        pred_conf = torch.sigmoid(conv_raw_conf)
+        pred_prob = torch.sigmoid(conv_raw_prob)
 
+        return torch.cat([pred_xywh, pred_conf, pred_prob], dim=-1)
 
 class SubNet(nn.Module):
     def __init__(self,  cfg=cfg):
@@ -244,9 +247,9 @@ class YOLOV3(nn.Module):
         )
 
         # head
-        self.head_s = DetectionHead(self.anchors[0], self.strides[0])
-        self.head_m = DetectionHead(self.anchors[1], self.strides[1])
-        self.head_l = DetectionHead(self.anchors[2], self.strides[2])
+        self.head_s = DetectionHead(num_class, self.anchors[0], self.strides[0])
+        self.head_m = DetectionHead(num_class, self.anchors[1], self.strides[1])
+        self.head_l = DetectionHead(num_class, self.anchors[2], self.strides[2])
 
     def _filtered(self, input_processed, input_clean):
         # 这里处理的都是batch
