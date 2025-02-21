@@ -3,27 +3,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from config_lowlight import args, cfg
-from utils import read_class_names
+from utils import read_class_names, write_mes
 from dataset import CustomDataset
 from .model import YOLOV3
-
-
-def write_mes(msg, log_name=None, show=True, mode='a'):
-    get_end = lambda line: '' if line.endswith('\n') else '\n'
-    if show:
-        if isinstance(msg, str):
-            print(msg, end=get_end(msg))
-        elif isinstance(msg, (list, tuple)):
-            for line in msg:
-                print(line, end=get_end(line))  # might be a different thing
-        else:
-            print(msg)
-
-    if log_name is not None:
-        with open(log_name, mode) as f:
-            f.writelines(msg)
 
 
 class YOLOTrainer:
@@ -97,16 +80,6 @@ class YOLOLoss(nn.Module):
             'total': giou_loss + conf_loss + cls_loss + recovery_loss
         }
 
-
-# 数据加载器
-class LowlightDataset(torch.utils.data.Dataset):
-    def __init__(self, ...):
-
-    # 实现数据加载和预处理
-
-    def __getitem__(self, idx):
-        # 返回增强后的图像和标注
-        return image, targets
 
 
 # 使用示例

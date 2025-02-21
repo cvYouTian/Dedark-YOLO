@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 from utils import get_anchors
 import torch.nn.functional as F
-from config_lowlight import args, cfg
+from config_lowlight import cfg
 
 
 class DBL(nn.Module):
@@ -118,7 +118,7 @@ class DetectionHead(nn.Module):
         # 定义行矩阵（每一行都是从0开始）[size, size]
         x = torch.arange(size, dtype=torch.float32).view(1, -1).repeat(size, 1)
 
-        # 定义一个[b, size, size, an, 2]的特征网格
+        # 定义一个[b, size, size, anchor, 2]的特征网格
         xy_grid = torch.stack([x, y], dim=-1)
         xy_grid = xy_grid[None, :, :, None, :].repeat(batch_size, 1, 1, self.anchor_per_scale, 1)
 
@@ -312,3 +312,8 @@ class YOLOV3(nn.Module):
 
         return pred_sbbox, pred_mbbox, pred_lbbox , recovery_loss
 
+
+
+if __name__ == '__main__':
+    model = YOLOV3(num_class=1, input_size=416, isp_flag=True)
+    print(model)

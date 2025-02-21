@@ -7,6 +7,7 @@ from config_lowlight import cfg
 from utils import image_preporcess, read_class_names, get_anchors, write_mes
 import torch
 
+
 class CfgDataloader:
     def __init__(self, batch_size, num_workers, num_gpus, collect_fn=None):
         self.batch_size = batch_size
@@ -137,7 +138,9 @@ class CustomDataset(Dataset):
         image_path = line[0]
         if not os.path.exists(image_path):
             raise KeyError("%s does not exist ... " % image_path)
+
         image = np.array(cv2.imread(image_path))
+
         bboxes = np.array([list(map(lambda x: int(float(x)), box.split(','))) for box in line[1:]])
         if self.data_aug:
             image, bboxes = self.random_horizontal_flip(np.copy(image), np.copy(bboxes))
