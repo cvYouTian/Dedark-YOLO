@@ -1,9 +1,8 @@
-import random
-from pydoc import ispath
-
 import torch
 import torch.nn as nn
 import os
+import numpy as np
+from utils import get_anchors
 import torch.nn.functional as F
 import tqdm
 from jieba.lac_small.predict import batch_size
@@ -15,24 +14,6 @@ from sympy.physics.vector import outer
 from torch.nn import init
 import math
 from config_lowlight import args, cfg
-from model import gpu_id
-
-
-# 写日志操作
-def write_mes(msg, log_name=None, show=True, mode='a'):
-    get_end = lambda line: '' if line.endswith('\n') else '\n'
-    if show:
-        if isinstance(msg, str):
-            print(msg, end=get_end(msg))
-        elif isinstance(msg, (list, tuple)):
-            for line in msg:
-                print(line, end=get_end(line))  # might be a different thing
-        else:
-            print(msg)
-
-    if log_name is not None:
-        with open(log_name, mode) as f:
-            f.writelines(msg)
 
 
 class DBL(nn.Module):
@@ -105,6 +86,48 @@ class Darknet53(nn.Module):
 
         return route_1, route_2, out_put
 
+class DetectionHead(nn.Module):
+    def __init__(self, num_class, anchors, stride):
+        super(DetectionHead, self).__init__()
+        self.num_class = num_class
+        # [3, 2]
+        self.anchors = anchors
+        # 3
+        self.anchor_per_scale = len(anchors)
+        self.stride = stride
+
+    def conv_shape(self, x):
+        # [b, c, w, h]
+        conv_shape = x.shape
+        batch_size = conv_shape[0]
+        output_height = conv_shape[2]
+        output_width = conv_shape[3]
+
+        # 确保 height 和 width 相等
+        assert output_height == output_width, "Height and width must be equal"
+        output_size = output_height
+
+        return batch_size, output_size
+
+    def forward(self, x):
+        batch_size, output_size = self.conv_shape(x)
+        # [b, w, h, an, p]
+        x = x.view(batch_size, output_size, output_size, self.anchor_per_scale, 5 + self.num_class)
+
+        # 中心点坐标特征
+        conv_raw_dxdy = x[:, :, :, :, 0:2]  # dx, dy
+        # 宽高特征
+        conv_raw_dwdh = x[:, :, :, :, 2:4]  # dw, dh
+        # 置信度特征
+        conv_raw_conf = x[:, :, :, :, 4:5]  # confidence
+        # 每个类别的概率特征
+        conv_raw_prob = x[:, :, :, :, 5:]  # class probabilities
+
+
+
+
+
+
 class SubNet(nn.Module):
     def __init__(self,  cfg=cfg):
         super(SubNet, self).__init__()
@@ -164,12 +187,16 @@ class SubNet(nn.Module):
 
 # YOLOv3 Model
 class YOLOV3(nn.Module):
-    def __init__(self, num_class, anchors, strides, input_size=416, isp_flag=False):
+    def __init__(self, num_class, input_size=416, isp_flag=False):
         super(YOLOV3, self).__init__()
+        # 配置文件
         self.num_class = num_class
-        self.anchors = anchors
-        self.strides = strides
+        # [3, 3, 2]的np数组
+        self.anchors = get_anchors(cfg.YOLO.ANCHORS)
+        # 定义下采样率[8, 16, 32]
+        self.strides = np.array(cfg.YOLO.STRIDES)
         self.isp_flag = isp_flag
+
         # backbone
         self.darknet = Darknet53()
         # neck
@@ -217,22 +244,19 @@ class YOLOV3(nn.Module):
         )
 
         # head
-        self.head_s = DetectionHead(256, len(anchors[0]), num_classes)
-        self.head_m = DetectionHead(256, len(anchors[0]), num_classes)
-        self.head_l = DetectionHead(256, len(anchors[0]), num_classes)
+        self.head_s = DetectionHead(self.anchors[0], self.strides[0])
+        self.head_m = DetectionHead(self.anchors[1], self.strides[1])
+        self.head_l = DetectionHead(self.anchors[2], self.strides[2])
 
-        # 类似实现其他检测头
     def _filtered(self, input_processed, input_clean):
-        # 实现前向传播逻辑, 定义微调的子网络
         # 这里处理的都是batch
-
         self.filter_params = input_processed
         filtered_pipline = []
 
         if self.isp_flag:
             # 实现子网络处理模块
             input_data = F.interpolate(input_processed, size=(256, 256), mode='bilinear', align_corners=False)
-            fine_tune = SubNet(input_channels=3, cfg=cfg)(input_data)
+            fine_tune = SubNet(cfg=cfg)(input_data)
 
             # 白平衡等滤波器
             filters = cfg.filters
@@ -258,19 +282,23 @@ class YOLOV3(nn.Module):
         image_filtered, filtered_pipline, recovery_loss = self._filtered(x, input_clean)
         # backbone
         route_1, route_2, x = self.darknet(image_filtered)
+
         # neck
         x = self.conv_lbranch(x)
+        # [b,13,13,18]
         l_box = self.conv_lbox(x)
 
         x = self.l_upsample(x)
         x = torch.concat([route_2, x], 1)
         x = self.conv_mbranch(x)
+        # [b,26,26,18]
         m_box = self.conv_mbox(x)
 
         x = self.m_upsample(x)
         x = torch.concat([route_1, x], 1)
 
         x = self.conv_sbranch(x)
+        # [b,52,52,18]
         s_box = self.conv_sbox(x)
 
         # 多尺度检测头
@@ -278,6 +306,6 @@ class YOLOV3(nn.Module):
         # out_m = self.head_m(x)
         # out_l = self.head_l(x)
 
-        return l_box, m_box, s_box, recovery_loss
+        return s_box, m_box,l_box , recovery_loss
 
 

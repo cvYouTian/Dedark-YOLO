@@ -383,6 +383,7 @@ __C.YOLO = edict()
 __C.YOLO.CLASSES = args.class_name
 __C.YOLO.ANCHORS = r"D:\project\Image-Adaptive-YOLO-main\data\anchors\baseline_anchors.txt"
 __C.YOLO.MOVING_AVE_DECAY = 0.9995
+
 __C.YOLO.STRIDES = [8, 16, 32]
 __C.YOLO.ANCHOR_PER_SCALE = 3
 __C.YOLO.IOU_LOSS_THRESH = 0.5
