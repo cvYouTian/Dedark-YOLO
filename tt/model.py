@@ -124,12 +124,12 @@ class DetectionHead(nn.Module):
 
         pred_xy = (torch.sigmoid(conv_raw_dxdy) + xy_grid) * self.stride
         pred_wh = (torch.exp(conv_raw_dwdh) * self.anchors) * self.stride
-        pred_xywh = torch.cat([pred_xy, pred_wh], dim=-1)
+        pred_xywh = torch.concat([pred_xy, pred_wh], dim=-1)
 
         pred_conf = torch.sigmoid(conv_raw_conf)
         pred_prob = torch.sigmoid(conv_raw_prob)
 
-        return torch.cat([pred_xywh, pred_conf, pred_prob], dim=-1)
+        return torch.concat([pred_xywh, pred_conf, pred_prob], dim=-1)
 
 class SubNet(nn.Module):
     def __init__(self,  cfg=cfg):
@@ -259,7 +259,8 @@ class YOLOV3(nn.Module):
         if self.isp_flag:
             # 实现子网络处理模块
             input_data = F.interpolate(input_processed, size=(256, 256), mode='bilinear', align_corners=False)
-            fine_tune = SubNet(cfg=cfg)(input_data)
+            fine_tune = SubNet(cfg=cfg)
+            fine_tune = fine_tune(input_data)
 
             # 白平衡等滤波器
             filters = cfg.filters
@@ -305,10 +306,9 @@ class YOLOV3(nn.Module):
         s_box = self.conv_sbox(x)
 
         # 多尺度检测头
-        # out_s = self.head_s(x)
-        # out_m = self.head_m(x)
-        # out_l = self.head_l(x)
+        pred_sbbox = self.head_s(s_box)
+        pred_mbbox = self.head_m(m_box)
+        pred_lbbox = self.head_l(l_box)
 
-        return s_box, m_box,l_box , recovery_loss
-
+        return pred_sbbox, pred_mbbox, pred_lbbox , recovery_loss
 

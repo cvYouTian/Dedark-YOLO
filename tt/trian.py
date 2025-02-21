@@ -1,12 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from config_lowlight import args, cfg
+from utils import read_class_names
 from dataset import CustomDataset
-from model import YOLOV3
-import os
+from .model import YOLOV3
 
 
 def write_mes(msg, log_name=None, show=True, mode='a'):
@@ -28,16 +29,18 @@ def write_mes(msg, log_name=None, show=True, mode='a'):
 class YOLOTrainer:
     def __init__(self, args):
         # 初始化参数
-        self.model = YOLOV3(num_class=len(classes)).to(device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=args.initial_lr)
+        self.model = YOLOV3(num_class=len(read_class_names(args.YOLO.CLASSES)), isp_flag=True).to(device)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=args.TRAIN.LEARN_RATE_INIT)
         self.criterion = YOLOLoss()  # 需要自定义损失函数
 
         # 数据加载
-        self.train_loader = DataLoader(CustomDataset(...), batch_size=args.batch_size, shuffle=True)
-        self.val_loader = DataLoader(...)
+        self.train_loader = DataLoader(CustomDataset("train", cfg),
+                                       batch_size=args.TRAIN.BATCH_SIZE, shuffle=True)
+        self.val_loader = DataLoader(CustomDataset("test", cfg),
+                                     batch_size=args.TEST.BATCH_SIZE, shuffle=False)
 
         # 学习率调度
-        self.scheduler = CosineAnnealingWarmRestarts(...)  # 根据需求配置
+        self.scheduler = CosineAnnealingWarmRestarts(self.optimizer, T_0=10, T_mult=2, eta_min=args.TRAIN.LEARN_RATE_END)
 
     def train(self):
         for epoch in range(args.epochs):
