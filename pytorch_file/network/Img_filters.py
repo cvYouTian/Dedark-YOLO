@@ -1,154 +1,207 @@
 import torch
 import torch.nn.functional as F
+import numpy as np
 import math
 
+
+# ---------------------- 工具函数 ----------------------
 def tanh_range(l, r, initial=None):
+    """将输入限制在 [l, r] 范围的 tanh 变换"""
+
     def forward(x):
         return torch.tanh(x) * (r - l) / 2 + (r + l) / 2
+
     return forward
 
+
 def rgb2lum(img):
+    """RGB 转亮度 (PyTorch 版本)"""
     return 0.27 * img[:, 0, :, :] + 0.67 * img[:, 1, :, :] + 0.06 * img[:, 2, :, :]
 
-def lerp(a, b, l):
-    return (1 - l) * a + l * b
 
+def lerp(a, b, l):
+    """线性插值 (保持设备一致)"""
+    return (1 - l) * a.to(b.device) + l * b
+
+
+# ---------------------- 基类 Filter ----------------------
 class Filter:
-    def __init__(self, net, cfg):
+    def __init__(self, cfg):
         self.cfg = cfg
         self.num_filter_parameters = None
         self.short_name = None
-        self.filter_parameters = None
+        self.begin_filter_parameter = 0
 
     def get_short_name(self):
-        assert self.short_name
         return self.short_name
 
     def get_num_filter_parameters(self):
-        assert self.num_filter_parameters
         return self.num_filter_parameters
 
     def get_begin_filter_parameter(self):
         return self.begin_filter_parameter
 
-    def extract_parameters(self, features):
-        return (features[:, self.get_begin_filter_parameter():(
-                    self.get_begin_filter_parameter() + self.get_num_filter_parameters())],
-                features[:, self.get_begin_filter_parameter():(
-                            self.get_begin_filter_parameter() + self.get_num_filter_parameters())])
-
     def filter_param_regressor(self, features):
         raise NotImplementedError
 
     def process(self, img, param):
         raise NotImplementedError
 
-    def debug_info_batched(self):
-        return False
-
-    def no_high_res(self):
-        return False
-
-    def apply(self, img, img_features=None, specified_parameter=None, high_res=None):
-        assert (img_features is None) ^ (specified_parameter is None)
+    def apply(self, img, img_features=None, specified_parameter=None):
         if img_features is not None:
-            filter_features, mask_parameters = self.extract_parameters(img_features)
-            filter_parameters = self.filter_param_regressor(filter_features)
+            filter_params = self.filter_param_regressor(img_features)
         else:
-            assert not self.use_masking()
-            filter_parameters = specified_parameter
-            mask_parameters = torch.zeros((1, self.get_num_mask_parameters()), dtype=torch.float32)
+            filter_params = specified_parameter
+        return self.process(img, filter_params)
 
-        if high_res is not None:
-            pass  # 高分辨率处理逻辑
+    def get_mask(self, img, mask_params):
+        """生成空间掩码 (PyTorch 优化版)"""
+        if not self.cfg.masking:
+            return torch.ones_like(img[:, :1, :, :])
 
-        debug_info = {}
-        if self.debug_info_batched():
-            debug_info['filter_parameters'] = filter_parameters
-        else:
-            debug_info['filter_parameters'] = filter_parameters
+        # 生成网格坐标
+        B, C, H, W = img.shape
+        y_coords = torch.linspace(-1, 1, H, device=img.device)
+        x_coords = torch.linspace(-1, 1, W, device=img.device)
+        y_grid, x_grid = torch.meshgrid(y_coords, x_coords)
+        grid = torch.stack([x_grid, y_grid], dim=-1).unsqueeze(0)  # [1,H,W,2]
 
-        low_res_output = self.process(img, filter_parameters)
+        # 计算掩码参数
+        lum = rgb2lum(img).unsqueeze(1)  # [B,1,H,W]
+        inp = (grid[..., 0] * mask_params[:, 0].view(-1, 1, 1, 1) +
+               grid[..., 1] * mask_params[:, 1].view(-1, 1, 1, 1) +
+               (lum - 0.5) * mask_params[:, 2].view(-1, 1, 1, 1) +
+               mask_params[:, 3].view(-1, 1, 1, 1) * 2)
 
-        if high_res is not None:
-            if self.no_high_res():
-                high_res_output = high_res
-            else:
-                self.high_res_mask = self.get_mask(high_res, mask_parameters)
-                high_res_output = lerp(high_res, self.process(high_res, filter_parameters), self.high_res_mask)
-        else:
-            high_res_output = None
-
-        return low_res_output, filter_parameters
-
-    def use_masking(self):
-        return self.cfg.masking
-
-    def get_num_mask_parameters(self):
-        return 6
-
-    def get_mask(self, img, mask_parameters):
-        if not self.use_masking():
-            print('* Masking Disabled')
-            return torch.ones((1, 1, 1, 1), dtype=torch.float32)
-        else:
-            print('* Masking Enabled')
-
-        filter_input_range = 5
-        assert mask_parameters.shape == self.get_num_mask_parameters()
-        mask_parameters = tanh_range(l=-filter_input_range, r=filter_input_range)(mask_parameters)
-        size = list(img.shape[1:3])
-        grid = torch.zeros((1, size, size, 2), dtype=torch.float32)
-
-        shorter_edge = min(size, size)
-        for i in range(size):
-            for j in range(size):
-                grid[0, i, j, 0] = (i + (shorter_edge - size) / 2.0) / shorter_edge - 0.5
-                grid[0, i, j, 1] = (j + (shorter_edge - size) / 2.0) / shorter_edge - 0.5
-
-        grid = grid.to(img.device)
-        inp = grid[:, :, :, 0, None] * mask_parameters[:, None, None, 0, None] + \
-              grid[:, :, :, 1, None] * mask_parameters[:, None, None, 1, None] + \
-              mask_parameters[:, None, None, 2, None] * (rgb2lum(img) - 0.5) + \
-              mask_parameters[:, None, None, 3, None] * 2
-
-        inp *= self.cfg.maximum_sharpness * mask_parameters[:, None, None, 4, None] / filter_input_range
+        inp *= self.cfg.maximum_sharpness * mask_params[:, 4].view(-1, 1, 1, 1)
         mask = torch.sigmoid(inp)
-        mask = mask * (mask_parameters[:, None, None, 5, None] / filter_input_range * 0.5 + 0.5) * (
+        mask = mask * (mask_params[:, 5].view(-1, 1, 1, 1) * 0.5 + 0.5) * (
                     1 - self.cfg.minimum_strength) + self.cfg.minimum_strength
         return mask
 
 
+# ---------------------- 具体滤镜实现 ----------------------
 class UsmFilter(Filter):
-    def __init__(self, net, cfg):
-        super().__init__(net, cfg)
+    """非锐化掩模 (PyTorch 优化实现)"""
+
+    def __init__(self, cfg):
+        super().__init__(cfg)
         self.short_name = 'UF'
         self.begin_filter_parameter = cfg.usm_begin_param
         self.num_filter_parameters = 1
+
+        # 预计算高斯核 (固定参数)
+        self.gauss_kernel = self._make_gaussian_kernel(5).to(cfg.device)
+
+    def _make_gaussian_kernel(self, sigma):
+        """创建2D高斯核 (支持梯度计算)"""
+        radius = 12
+        x = torch.arange(-radius, radius + 1, dtype=torch.float32)
+        k = torch.exp(-0.5 * (x / sigma) ** 2)
+        k = k / k.sum()
+        return (k.unsqueeze(1) * k.unsqueeze(0)).view(1, 1, 25, 25)
 
     def filter_param_regressor(self, features):
         return tanh_range(*self.cfg.usm_range)(features)
 
     def process(self, img, param):
-        def make_gaussian_2d_kernel(sigma, dtype=torch.float32):
-            radius = 12
-            x = torch.arange(-radius, radius + 1, dtype=dtype)
-            k = torch.exp(-0.5 * torch.square(x / sigma))
-            k = k / torch.sum(k)
-            return torch.outer(k, k)
+        # 维度调整: PyTorch 使用 NCHW 格式
+        B, C, H, W = img.shape
 
-        kernel_i = make_gaussian_2d_kernel(5)
-        kernel_i = kernel_i.unsqueeze(0).unsqueeze(0)
-        kernel_i = kernel_i.expand(1, 1, -1, -1)
+        # 反射填充
+        padded = F.pad(img, (12, 12, 12, 12), mode='reflect')
 
-        pad_w = (25 - 1) // 2
-        padded = F.pad(img, (pad_w, pad_w, pad_w, pad_w), mode='reflect')
-        outputs = []
-        for channel_idx in range(3):
-            data_c = padded[:, channel_idx:channel_idx+1, :, :]
-            data_c = F.conv2d(data_c, kernel_i, stride=1, padding=0)
-            outputs.append(data_c)
+        # 分离通道处理
+        blurred = F.conv2d(padded.view(B * C, 1, H + 24, W + 24),
+                           self.gauss_kernel,
+                           padding=0).view(B, C, H, W)
 
-        output = torch.cat(outputs, dim=1)
-        img_out = (img - output) * param[:, None, None, :] + img
-        return img_out
+        # 锐化处理
+        return img + (img - blurred) * param.view(-1, 1, 1, 1)
+
+
+class GammaFilter(Filter):
+    """伽马校正"""
+
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.short_name = 'G'
+        self.begin_filter_parameter = cfg.gamma_begin_param
+        self.num_filter_parameters = 1
+
+    def filter_param_regressor(self, features):
+        log_range = math.log(self.cfg.gamma_range)
+        return torch.exp(tanh_range(-log_range, log_range)(features))
+
+    def process(self, img, param):
+        return torch.clamp(img, 1e-5) ** param.view(-1, 1, 1, 1)
+
+
+class ImprovedWhiteBalanceFilter(Filter):
+    """改进的白平衡"""
+
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.short_name = 'W'
+        self.begin_filter_parameter = cfg.wb_begin_param
+        self.num_filter_parameters = 3
+        self.channel_mask = torch.tensor([[0.0, 1.0, 1.0]], device=cfg.device)
+
+    def filter_param_regressor(self, features):
+        log_range = 0.5
+        scaled = tanh_range(-log_range, log_range)(features * self.channel_mask)
+        color_scaling = torch.exp(scaled)
+
+        # 亮度归一化
+        lum = 0.27 * color_scaling[:, 0] + 0.67 * color_scaling[:, 1] + 0.06 * color_scaling[:, 2]
+        return color_scaling / (lum.view(-1, 1) + 1e-5)
+
+    def process(self, img, param):
+        return img * param.view(-1, 3, 1, 1)
+
+
+class ToneFilter(Filter):
+    """色调曲线调整"""
+
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.short_name = 'T'
+        self.begin_filter_parameter = cfg.tone_begin_param
+        self.num_filter_parameters = cfg.curve_steps
+        self.step_size = 1.0 / cfg.curve_steps
+
+    def filter_param_regressor(self, features):
+        return tanh_range(*self.cfg.tone_curve_range)(features.view(-1, self.num_filter_parameters))
+
+    def process(self, img, param):
+        B, C, H, W = img.shape
+        param = param.view(B, 1, 1, self.num_filter_parameters)
+
+        # 分区间处理
+        total = torch.zeros_like(img)
+        for i in range(self.cfg.curve_steps):
+            lower = i * self.step_size
+            upper = (i + 1) * self.step_size
+            mask = (img >= lower) & (img < upper)
+            total += mask * (img - lower) * param[:, :, :, :, i]
+
+            # 归一化
+        return total * self.cfg.curve_steps / (param.sum(dim=-1, keepdim=True) + 1e-5)
+
+
+class ContrastFilter(Filter):
+    """对比度调整"""
+
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.short_name = 'Ct'
+        self.begin_filter_parameter = cfg.contrast_begin_param
+        self.num_filter_parameters = 1
+
+    def filter_param_regressor(self, features):
+        return torch.tanh(features) * 0.5 + 0.5  # 限制到[0,1]
+
+    def process(self, img, param):
+        lum = rgb2lum(img).unsqueeze(1)
+        contrast_lum = (-torch.cos(math.pi * lum) + 1) * 0.5
+        return lerp(img, img / (lum + 1e-5) * contrast_lum, param.view(-1, 1, 1, 1))

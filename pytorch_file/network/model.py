@@ -7,7 +7,7 @@ from pytorch_file.configs.config_lowlight import cfg
 
 
 class DBL(nn.Module):
-    def __init__(self, ic, oc, ks=3,downsample=False):
+    def __init__(self, ic, oc, ks=3, downsample=False):
         super(DBL, self).__init__()
         if downsample:
             self.conv = nn.Conv2d(ic, oc, kernel_size=ks, stride=2, padding=ks // 2, bias=False)
@@ -22,6 +22,7 @@ class DBL(nn.Module):
         x = self.leakrelu(x)
         return x
 
+
 class resunit(nn.Module):
     def __init__(self, ic, mc, oc):
         super(resunit, self).__init__()
@@ -34,6 +35,7 @@ class resunit(nn.Module):
         x = self.conv2(x)
         return x + shortcut
 
+
 class resn(nn.Module):
     def __init__(self, n, ic, mc, oc):
         super(resn, self).__init__()
@@ -42,6 +44,7 @@ class resn(nn.Module):
     def forward(self, x):
         x = self.res(x)
         return x
+
 
 class Darknet53(nn.Module):
     def __init__(self):
@@ -61,6 +64,7 @@ class Darknet53(nn.Module):
 
         self.conv6 = DBL(512, 1024, downsample=True)
         self.res5 = resn(4, 1024, 512, 1024)
+
     def forward(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
@@ -75,6 +79,7 @@ class Darknet53(nn.Module):
         out_put = self.res5(x)
 
         return route_1, route_2, out_put
+
 
 class DetectionHead(nn.Module):
     def __init__(self, num_class, anchors, stride):
@@ -131,8 +136,9 @@ class DetectionHead(nn.Module):
 
         return torch.concat([pred_xywh, pred_conf, pred_prob], dim=-1)
 
+
 class SubNet(nn.Module):
-    def __init__(self,  cfg=cfg):
+    def __init__(self, cfg=cfg):
         super(SubNet, self).__init__()
         self.output_dim = cfg.num_filter_parameters
         channels = 6
@@ -187,6 +193,7 @@ class SubNet(nn.Module):
         # 全连接部分
         x = self.fc_layers(x)
         return x
+
 
 # YOLOv3 Model
 class YOLOV3(nn.Module):
@@ -310,7 +317,8 @@ class YOLOV3(nn.Module):
         pred_mbbox = self.head_m(m_box)
         pred_lbbox = self.head_l(l_box)
 
-        return pred_sbbox, pred_mbbox, pred_lbbox , recovery_loss
+        return pred_sbbox, pred_mbbox, pred_lbbox, recovery_loss
+
 
 if __name__ == '__main__':
     model = YOLOV3(num_class=1, isp_flag=True)
