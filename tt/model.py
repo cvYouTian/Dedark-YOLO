@@ -190,7 +190,7 @@ class SubNet(nn.Module):
 
 # YOLOv3 Model
 class YOLOV3(nn.Module):
-    def __init__(self, num_class, input_size=416, isp_flag=False):
+    def __init__(self, num_class, isp_flag=False):
         super(YOLOV3, self).__init__()
         # 配置文件
         self.num_class = num_class
@@ -316,4 +316,6 @@ class YOLOV3(nn.Module):
 
 if __name__ == '__main__':
     model = YOLOV3(num_class=1, input_size=416, isp_flag=True)
-    print(model)
+    # print(model)
+    for name, param in model.named_parameters():
+        print(name, "\n")

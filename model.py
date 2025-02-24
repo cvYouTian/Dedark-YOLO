@@ -386,6 +386,7 @@ class YOLOV3(object):
         enclose_right_down = tf.maximum(boxes1[..., 2:], boxes2[..., 2:])
         enclose = tf.maximum(enclose_right_down - enclose_left_up, 0.0)
         enclose_area = enclose[..., 0] * enclose[..., 1]
+
         giou = iou - 1.0 * (enclose_area - union_area) / enclose_area
 
         return giou
