@@ -754,17 +754,22 @@ class YoloTrain(object):
         self.second_stage_epochs = cfg.TRAIN.SECOND_STAGE_EPOCHS
         self.warmup_periods = cfg.TRAIN.WARMUP_EPOCHS
         self.initial_weight = cfg.TRAIN.INITIAL_WEIGHT
+
         self.time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
         self.moving_ave_decay = cfg.YOLO.MOVING_AVE_DECAY
         self.max_bbox_per_scale = 150
         self.train_logdir = "./data/log/train"
+
         self.trainset = Dataset('train')
         self.testset = Dataset('test')
+
         self.steps_per_period = len(self.trainset)
+
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         self.sess = tf.compat.v1.Session(config=config)
-        # self.sess              = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+
+        # self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 
         with tf.name_scope('define_input'):
             self.input_data = tf.compat.v1.placeholder(tf.float32, [None, None, None, 3], name='input_data')
