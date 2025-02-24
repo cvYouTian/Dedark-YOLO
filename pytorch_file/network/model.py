@@ -4,6 +4,7 @@ import numpy as np
 from pytorch_file.Utils.utils import get_anchors
 import torch.nn.functional as F
 from pytorch_file.configs.config_lowlight import cfg
+from pytorch_file.network.Img_filters import ImprovedWhiteBalanceFilter, GammaFilter, ToneFilter, ContrastFilter, UsmFilter
 
 
 class DBL(nn.Module):
@@ -138,10 +139,10 @@ class DetectionHead(nn.Module):
 
 
 class SubNet(nn.Module):
-    def __init__(self, cfg=cfg):
+    def __init__(self, cfg):
         super(SubNet, self).__init__()
         self.output_dim = cfg.num_filter_parameters
-        channels = 6
+        channels = 16
 
         # 卷积层定义
         self.conv_layers = nn.Sequential(
@@ -199,6 +200,7 @@ class SubNet(nn.Module):
 class YOLOV3(nn.Module):
     def __init__(self, num_class, isp_flag=False):
         super(YOLOV3, self).__init__()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # 配置文件
         self.num_class = num_class
         # [3, 3, 2]的np数组
@@ -266,12 +268,12 @@ class YOLOV3(nn.Module):
         if self.isp_flag:
             # 实现子网络处理模块
             input_data = F.interpolate(input_processed, size=(256, 256), mode='bilinear', align_corners=False)
-            fine_tune = SubNet(cfg=cfg)
+            fine_tune = SubNet(cfg=cfg).to(self.device)
             fine_tune = fine_tune(input_data)
 
             # 白平衡等滤波器
             filters = cfg.filters
-            filters = [filter(input_processed) for filter in filters]
+            filters = [globals()[x](input_processed, cfg) for x in filters]
             filters_parameters = []
 
             for i, filter in enumerate(filters):

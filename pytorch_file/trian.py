@@ -1,23 +1,19 @@
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
 from tqdm import tqdm
-import numpy as np
 from configs.config_lowlight import args, cfg
 import time
 from network.loss import YOLOLoss
-from Utils.utils import get_anchors
 import os
 from Utils.utils import read_class_names, write_mes
-from data.dataset import CustomDataset
+from data.dataset import YoloDataset
 from network.model import YOLOV3
-
 
 class YOLOTrainer:
     def __init__(self, args, cfg):
+        self.args = args
         # 3
         self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE
         # person
@@ -44,10 +40,10 @@ class YOLOTrainer:
         self.train_logdir = "./data/log/train"
 
         # 数据加载
-        self.train_loader = DataLoader(CustomDataset("train", cfg),
-                                       batch_size=args.TRAIN.BATCH_SIZE, shuffle=True)
-        self.val_loader = DataLoader(CustomDataset("test", cfg),
-                                     batch_size=args.TEST.BATCH_SIZE, shuffle=False)
+        self.train_loader = DataLoader(YoloDataset("train", cfg),
+                                       batch_size=cfg.TRAIN.BATCH_SIZE, shuffle=True)
+        self.val_loader = DataLoader(YoloDataset("test", cfg),
+                                     batch_size=cfg.TEST.BATCH_SIZE, shuffle=False)
 
         # step数
         self.steps_per_period = len(self.train_loader)
@@ -56,13 +52,13 @@ class YOLOTrainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # 初始化参数
-        self.model = YOLOV3(num_class=len(read_class_names(args.YOLO.CLASSES)), isp_flag=True).to(self.device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=args.TRAIN.LEARN_RATE_INIT)
+        self.model = YOLOV3(num_class=len(read_class_names(cfg.YOLO.CLASSES)), isp_flag=True).to(self.device)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=cfg.TRAIN.LEARN_RATE_INIT)
         self.criterion = YOLOLoss(cfg)  # 需要自定义损失函数
 
         # 学习率调度
         self.scheduler = CosineAnnealingWarmRestarts(self.optimizer, T_0=10, T_mult=2,
-                                                     eta_min=args.TRAIN.LEARN_RATE_END)
+                                                     eta_min=cfg.TRAIN.LEARN_RATE_END)
 
     def train(self):
         if os.path.exists(self.initial_weight):
@@ -74,7 +70,7 @@ class YOLOTrainer:
             print('=> Now it starts to train YOLOV3 from scratch ...')
             self.first_stage_epochs = 0
 
-        for epoch in range(args.epochs):
+        for epoch in range(cfg.TRAIN.SECOND_STAGE_EPOCHS):
             # consume的功能未实现
             if epoch <= self.first_stage_epochs:
                 # 冻结
@@ -84,12 +80,11 @@ class YOLOTrainer:
                 pass
 
             self.model.train()
-            train_epoch_loss = []
             pbar = tqdm(self.train_loader)
             for batch_idx, (input_data, label_sbbox, label_mbbox, label_lbbox,
                             true_sbboxes, true_mbboxes, true_lbboxes) in enumerate(pbar):
                 # 低光照增强
-                if args.lowlight_FLAG:
+                if self.args.lowlight_FLAG:
                     lowlight_param = torch.rand(1) * 5 + 5  # [5, 10]
                     enhanced_images = input_data ** lowlight_param.item()
                 else:
@@ -114,6 +109,7 @@ class YOLOTrainer:
                 # 计算损失
                 loss_dict = self.criterion(conv, pred, label, true, recovery_loss)
                 total_loss = loss_dict['total']
+                print(total_loss)
 
                 # 反向传播
                 self.optimizer.zero_grad()
@@ -140,9 +136,12 @@ class YOLOTrainer:
                     label_sbbox = label_sbbox.to(self.device)
                     label_mbbox = label_mbbox.to(self.device)
                     label_lbbox = label_lbbox.to(self.device)
+                    label = [label_sbbox, label_mbbox, label_lbbox]
+
                     true_sbboxes = true_sbboxes.to(self.device)
                     true_mbboxes = true_mbboxes.to(self.device)
                     true_lbboxes = true_lbboxes.to(self.device)
+                    true = [true_sbboxes, true_mbboxes, true_lbboxes]
 
                     # 前向传播
                     pred, recovery_loss, conv = self.model(enhanced_images, input_data)
@@ -167,41 +166,8 @@ class YOLOTrainer:
                 'optimizer': self.optimizer.state_dict(),
             }, f'checkpoints/epoch_{epoch}.pth')
 
-            # train_epoch_loss, test_epoch_loss = np.mean(train_epoch_loss), np.mean(test_epoch_loss)
-            # ckpt_file = args.ckpt_dir + "/yolov3_test_loss=%.4f.ckpt" % test_epoch_loss
-            # log_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
-            # print("=> Epoch: %2d Time: %s Train loss: %.2f Test loss: %.2f Saving %s ..."
-            #       % (epoch, log_time, train_epoch_loss, test_epoch_loss, ckpt_file))
-            # self.saver.save(self.sess, ckpt_file, global_step=epoch)
-
 
 # 使用示例
 if __name__ == '__main__':
     trainer = YOLOTrainer(args, cfg)
     trainer.train()
-
-# if __name__ == '__main__':
-#     # 配置 GPU
-#     device = torch.device(f'cuda:{args.gpu_id}' if args.use_gpu else 'cpu')
-#     # 配置文件
-#     if args.use_gpu == 0:
-#         gpu_id = '-1'
-#     else:
-#         gpu_id = args.gpu_id
-#         gpu_list = list()
-#         gpu_ids = gpu_id.split(',')
-#         for i in range(len(gpu_ids)):
-#             gpu_list.append('/gpu:%d' % int(i))
-#     os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
-#
-#     exp_folder = os.path.join(args.exp_dir, 'exp_{}'.format(args.exp_num))
-#
-#     set_ckpt_dir = args.ckpt_dir
-#     args.ckpt_dir = os.path.join(exp_folder, set_ckpt_dir)
-#     if not os.path.exists(args.ckpt_dir):
-#         os.makedirs(args.ckpt_dir)
-#
-#     config_log = os.path.join(exp_folder, 'config.txt')
-#     arg_dict = args.__dict__
-#     msg = ['{}: {}\n'.format(k, v) for k, v in arg_dict.items()]
-#     write_mes(msg, config_log, mode='w')

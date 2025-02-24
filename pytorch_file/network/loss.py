@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from pytorch_file.configs.config_lowlight import args
 from pytorch_file.Utils.utils import get_anchors
 from pytorch_file.Utils.utils import read_class_names, write_mes
 
@@ -15,7 +14,7 @@ class YOLOLoss(nn.Module):
         self.anchors = get_anchors(cfg.YOLO.ANCHORS)
         # 定义下采样率[8, 16, 32]
         self.strides = np.array(cfg.YOLO.STRIDES)
-        self.anchor_per_scale = args.YOLO.ANCHOR_PER_SCALE
+        self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE
         self.num_classes = len(read_class_names(cfg.YOLO.CLASSES))
 
     def focal(self, target, actual, alpha=1.0, gamma=2.0):

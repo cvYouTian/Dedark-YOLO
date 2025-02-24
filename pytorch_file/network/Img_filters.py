@@ -6,7 +6,7 @@ import math
 
 # ---------------------- 基类 Filter ----------------------
 class Filter:
-    def __init__(self, cfg):
+    def __init__(self, net, cfg):
         self.cfg = cfg
         self.num_filter_parameters = None
         self.short_name = None
@@ -64,8 +64,8 @@ class Filter:
 class UsmFilter(Filter):
     """非锐化掩模 (PyTorch 优化实现)"""
 
-    def __init__(self, cfg):
-        super().__init__(cfg)
+    def __init__(self, net, cfg):
+        super().__init__(net, cfg)
         self.short_name = 'UF'
         self.begin_filter_parameter = cfg.usm_begin_param
         self.num_filter_parameters = 1
@@ -103,8 +103,8 @@ class UsmFilter(Filter):
 class GammaFilter(Filter):
     """伽马校正"""
 
-    def __init__(self, cfg):
-        super().__init__(cfg)
+    def __init__(self, net, cfg):
+        super().__init__(net, cfg)
         self.short_name = 'G'
         self.begin_filter_parameter = cfg.gamma_begin_param
         self.num_filter_parameters = 1
@@ -120,8 +120,8 @@ class GammaFilter(Filter):
 class ImprovedWhiteBalanceFilter(Filter):
     """改进的白平衡"""
 
-    def __init__(self, cfg):
-        super().__init__(cfg)
+    def __init__(self, net, cfg):
+        super().__init__(net, cfg)
         self.short_name = 'W'
         self.begin_filter_parameter = cfg.wb_begin_param
         self.num_filter_parameters = 3
@@ -143,8 +143,8 @@ class ImprovedWhiteBalanceFilter(Filter):
 class ToneFilter(Filter):
     """色调曲线调整"""
 
-    def __init__(self, cfg):
-        super().__init__(cfg)
+    def __init__(self, net, cfg):
+        super().__init__(net, cfg)
         self.short_name = 'T'
         self.begin_filter_parameter = cfg.tone_begin_param
         self.num_filter_parameters = cfg.curve_steps
@@ -172,8 +172,8 @@ class ToneFilter(Filter):
 class ContrastFilter(Filter):
     """对比度调整"""
 
-    def __init__(self, cfg):
-        super().__init__(cfg)
+    def __init__(self, net, cfg):
+        super().__init__(net, cfg)
         self.short_name = 'Ct'
         self.begin_filter_parameter = cfg.contrast_begin_param
         self.num_filter_parameters = 1
