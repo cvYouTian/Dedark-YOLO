@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from utils import get_anchors
+from pytorch_file.Utils.utils import get_anchors
 import torch.nn.functional as F
-from config_lowlight import cfg
+from pytorch_file.configs.config_lowlight import cfg
 
 
 class DBL(nn.Module):
@@ -312,10 +312,8 @@ class YOLOV3(nn.Module):
 
         return pred_sbbox, pred_mbbox, pred_lbbox , recovery_loss
 
-
-
 if __name__ == '__main__':
-    model = YOLOV3(num_class=1, input_size=416, isp_flag=True)
+    model = YOLOV3(num_class=1, isp_flag=True)
     # print(model)
     for name, param in model.named_parameters():
         print(name, "\n")

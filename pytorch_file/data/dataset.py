@@ -3,8 +3,7 @@ import numpy as np
 import cv2
 import random
 from torch.utils.data import Dataset, DataLoader
-from config_lowlight import cfg
-from utils import image_preporcess, read_class_names, get_anchors, write_mes
+from pytorch_file.Utils.utils import image_preporcess, read_class_names, get_anchors, write_mes
 import torch
 
 
