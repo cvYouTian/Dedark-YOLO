@@ -4,7 +4,7 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
+import numpy as np
 from config_lowlight import args, cfg
 import time
 import os
@@ -87,7 +87,7 @@ class YOLOTrainer:
                     lowlight_param = torch.rand(1) * 5 + 5  # [5, 10]
                     enhanced_images = input_data ** lowlight_param.item()
                 else:
-                    print("not implement lowlight!!")
+                    print("not implement lowlight train!!")
                     enhanced_images = input_data
 
                 enhanced_images = enhanced_images.to(self.device)
@@ -100,7 +100,7 @@ class YOLOTrainer:
                 true_lbboxes = true_lbboxes.to(self.device)
 
                 # 前向传播
-                pred_s, pred_m, pred_l, recovery = self.model(enhanced_images, input_data)
+                pred_s, pred_m, pred_l, recovery_loss = self.model(enhanced_images, input_data)
 
                 # 计算损失
                 loss_dict = self.criterion(pred_s, pred_m, pred_l, targets, recovery, images)
@@ -114,13 +114,50 @@ class YOLOTrainer:
                 # 记录日志...
 
             # 验证步骤
-            self.validate()
+            self.model.eval()
+            test_epoch_loss = []
+            with torch.no_grad():
+
+                for batch_idx, (input_data, label_sbbox, label_mbbox, label_lbbox,
+                                true_sbboxes, true_mbboxes, true_lbboxes) in enumerate(self.val_loader):
+                    if args.lowlight_FLAG:
+                        lowlight_param = torch.rand(1) * 5 + 5  # [5, 10]
+                        enhanced_images = input_data ** lowlight_param.item()
+                    else:
+                        print("not implement lowlight train!!")
+                        enhanced_images = input_data
+
+                    enhanced_images = enhanced_images.to(self.device)
+                    label_sbbox = label_sbbox.to(self.device)
+                    label_mbbox = label_mbbox.to(self.device)
+                    label_lbbox = label_lbbox.to(self.device)
+                    true_sbboxes = true_sbboxes.to(self.device)
+                    true_mbboxes = true_mbboxes.to(self.device)
+                    true_lbboxes = true_lbboxes.to(self.device)
+
+                    # 前向传播
+                    output = self.model(enhanced_images, input_data)
+                    giou_loss, conf_loss, prob_loss, recovery_loss = self.model.compute_loss(
+                        label_sbbox, label_mbbox, label_lbbox, true_sbboxes, true_mbboxes, true_lbboxes)
+                    loss = giou_loss + conf_loss + prob_loss
+
+                    test_epoch_loss.append(loss.item())
+
 
             # 保存模型
-            torch.save({
-                'model': self.model.state_dict(),
-                'optimizer': self.optimizer.state_dict(),
-            }, f'checkpoints/epoch_{epoch}.pth')
+
+            # torch.save({
+            #     'model': self.model.state_dict(),
+            #     'optimizer': self.optimizer.state_dict(),
+            # }, f'checkpoints/epoch_{epoch}.pth')
+
+            train_epoch_loss, test_epoch_loss = np.mean(train_epoch_loss), np.mean(test_epoch_loss)
+            ckpt_file = args.ckpt_dir + "/yolov3_test_loss=%.4f.ckpt" % test_epoch_loss
+            log_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+            print("=> Epoch: %2d Time: %s Train loss: %.2f Test loss: %.2f Saving %s ..."
+                  % (epoch, log_time, train_epoch_loss, test_epoch_loss, ckpt_file))
+            self.saver.save(self.sess, ckpt_file, global_step=epoch)
+
 
 
 class YOLOLoss(nn.Module):

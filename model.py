@@ -929,7 +929,7 @@ class YoloTrain(object):
                     # lowlight_param = random.uniform(-2, 0)
                     lowlight_param = 1
                     if random.randint(0, 2) > 0:
-                        lowlight_param = random.uniform(1.5, 5)
+                        lowlight_param = random.uniform(5, 10)
                     test_step_loss = self.sess.run(self.loss, feed_dict={
                         self.input_data: np.power(test_data[0], lowlight_param),
                         # test_data[0]*np.exp(lowlight_param*np.log(2)),
