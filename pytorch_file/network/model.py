@@ -312,12 +312,14 @@ class YOLOV3(nn.Module):
         # [b,52,52,18]
         s_box = self.conv_sbox(x)
 
+        conv = [s_box, m_box, l_box]
+
         # 多尺度检测头
         pred_sbbox = self.head_s(s_box)
         pred_mbbox = self.head_m(m_box)
         pred_lbbox = self.head_l(l_box)
 
-        return pred_sbbox, pred_mbbox, pred_lbbox, recovery_loss
+        return [pred_sbbox, pred_mbbox, pred_lbbox], recovery_loss, conv
 
 
 if __name__ == '__main__':

@@ -109,7 +109,7 @@ class YOLOTrainer:
                 true = [true_sbboxes, true_mbboxes, true_lbboxes]
 
                 # 前向传播
-                pred, recovery_loss = self.model(enhanced_images, input_data)
+                pred, recovery_loss, conv = self.model(enhanced_images, input_data)
 
                 # 计算损失
                 loss_dict = self.criterion(conv, pred, label, true, recovery_loss)
@@ -145,26 +145,34 @@ class YOLOTrainer:
                     true_lbboxes = true_lbboxes.to(self.device)
 
                     # 前向传播
-                    output = self.model(enhanced_images, input_data)
-                    giou_loss, conf_loss, prob_loss, recovery_loss = self.model.compute_loss(
-                        label_sbbox, label_mbbox, label_lbbox, true_sbboxes, true_mbboxes, true_lbboxes)
-                    loss = giou_loss + conf_loss + prob_loss
+                    pred, recovery_loss, conv = self.model(enhanced_images, input_data)
+                    """
+                     {
+                        'giou': giou_loss,
+                        'conf': conf_loss,
+                        'cls': cls_loss,
+                        'recovery': recovery_loss,
+                        'total': giou_loss + conf_loss + cls_loss + recovery_loss
+                    }
+                    """
+                    loss_dict = self.criterion(conv, pred, label, true, recovery_loss)
+                    loss = loss_dict['total']
 
                     test_epoch_loss.append(loss.item())
 
             # 保存模型
 
-            # torch.save({
-            #     'model': self.model.state_dict(),
-            #     'optimizer': self.optimizer.state_dict(),
-            # }, f'checkpoints/epoch_{epoch}.pth')
+            torch.save({
+                'model': self.model.state_dict(),
+                'optimizer': self.optimizer.state_dict(),
+            }, f'checkpoints/epoch_{epoch}.pth')
 
-            train_epoch_loss, test_epoch_loss = np.mean(train_epoch_loss), np.mean(test_epoch_loss)
-            ckpt_file = args.ckpt_dir + "/yolov3_test_loss=%.4f.ckpt" % test_epoch_loss
-            log_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
-            print("=> Epoch: %2d Time: %s Train loss: %.2f Test loss: %.2f Saving %s ..."
-                  % (epoch, log_time, train_epoch_loss, test_epoch_loss, ckpt_file))
-            self.saver.save(self.sess, ckpt_file, global_step=epoch)
+            # train_epoch_loss, test_epoch_loss = np.mean(train_epoch_loss), np.mean(test_epoch_loss)
+            # ckpt_file = args.ckpt_dir + "/yolov3_test_loss=%.4f.ckpt" % test_epoch_loss
+            # log_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+            # print("=> Epoch: %2d Time: %s Train loss: %.2f Test loss: %.2f Saving %s ..."
+            #       % (epoch, log_time, train_epoch_loss, test_epoch_loss, ckpt_file))
+            # self.saver.save(self.sess, ckpt_file, global_step=epoch)
 
 
 # 使用示例

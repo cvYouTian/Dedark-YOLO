@@ -1,27 +1,7 @@
 import torch
 import torch.nn.functional as F
-import numpy as np
+from pytorch_file.Utils.util_filters import lrelu, rgb2lum, tanh_range, lerp
 import math
-
-
-# ---------------------- 工具函数 ----------------------
-def tanh_range(l, r, initial=None):
-    """将输入限制在 [l, r] 范围的 tanh 变换"""
-
-    def forward(x):
-        return torch.tanh(x) * (r - l) / 2 + (r + l) / 2
-
-    return forward
-
-
-def rgb2lum(img):
-    """RGB 转亮度 (PyTorch 版本)"""
-    return 0.27 * img[:, 0, :, :] + 0.67 * img[:, 1, :, :] + 0.06 * img[:, 2, :, :]
-
-
-def lerp(a, b, l):
-    """线性插值 (保持设备一致)"""
-    return (1 - l) * a.to(b.device) + l * b
 
 
 # ---------------------- 基类 Filter ----------------------
