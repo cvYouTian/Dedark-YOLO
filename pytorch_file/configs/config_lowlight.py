@@ -19,15 +19,19 @@ parser.add_argument('--ISP_FLAG', dest='ISP_FLAG', type=bool, default=True, help
 parser.add_argument('--lowlight_FLAG', dest='lowlight_FLAG', type=bool, default=True,
                     help='whether use Hybrid data training')
 parser.add_argument('--train_path', dest='train_path', nargs='*',
-                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data/tielu_train.txt', help='folder of the training data')
+                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data/tielu_train.txt',
+                    help='folder of the training data')
 parser.add_argument('--test_path', dest='test_path', nargs='*',
-                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data/tielu_test.txt', help='folder of the training data')
+                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data/tielu_test.txt',
+                    help='folder of the training data')
 parser.add_argument('--class_name', dest='class_name', nargs='*',
-                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data/tielu_dark.names', help='folder of the training data')
+                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data/tielu_dark.names',
+                    help='folder of the training data')
 parser.add_argument('--WRITE_IMAGE_PATH', dest='WRITE_IMAGE_PATH', nargs='*',
                     default='./experiments_lowlight/exp_58/detection_vocnorm_test/', help='folder of the training data')
 parser.add_argument('--WEIGHT_FILE', dest='WEIGHT_FILE', nargs='*',
-                    default='./experiments_lowlight/exp_58/checkpoint/yolov3_test_loss=25.2496.ckpt-15', help='folder of the training data')
+                    default='./experiments_lowlight/exp_58/checkpoint/yolov3_test_loss=25.2496.ckpt-15',
+                    help='folder of the training data')
 parser.add_argument('--pre_train', dest='pre_train',
                     default='NULL', help='the path of pretrained models if is not null. not used for now')
 args = parser.parse_args()
@@ -109,17 +113,22 @@ __C.TEST.SHOW_LABEL = True
 __C.TEST.SCORE_THRESHOLD = 0.3
 __C.TEST.IOU_THRESHOLD = 0.45
 
+
 # Helper functions
 def rgb2lum(img):
     return 0.27 * img[:, 0] + 0.67 * img[:, 1] + 0.06 * img[:, 2]
 
+
 def tanh_range(l, r, initial=0):
     def func(features):
         return torch.tanh(features) * (r - l) / 2 + (r + l) / 2
+
     return func
+
 
 def lerp(a, b, t):
     return a + (b - a) * t
+
 
 # Filter base class
 class Filter:
@@ -141,8 +150,10 @@ class Filter:
         return self.begin_filter_parameter
 
     def extract_parameters(self, features):
-        return (features[:, self.get_begin_filter_parameter():(self.get_begin_filter_parameter() + self.get_num_filter_parameters())],
-                features[:, self.get_begin_filter_parameter():(self.get_begin_filter_parameter() + self.get_num_filter_parameters())])
+        return (features[:, self.get_begin_filter_parameter():(
+                    self.get_begin_filter_parameter() + self.get_num_filter_parameters())],
+                features[:, self.get_begin_filter_parameter():(
+                            self.get_begin_filter_parameter() + self.get_num_filter_parameters())])
 
     def filter_param_regressor(self, features):
         assert False
@@ -215,15 +226,18 @@ class Filter:
               mask_parameters[:, None, None, 3, None] * 2
         inp *= self.cfg.maximum_sharpness * mask_parameters[:, None, None, 4, None] / filter_input_range
         mask = torch.sigmoid(inp)
-        mask = mask * (mask_parameters[:, None, None, 5, None] / filter_input_range * 0.5 + 0.5) * (1 - self.cfg.minimum_strength) + self.cfg.minimum_strength
+        mask = mask * (mask_parameters[:, None, None, 5, None] / filter_input_range * 0.5 + 0.5) * (
+                    1 - self.cfg.minimum_strength) + self.cfg.minimum_strength
         return mask
 
     def visualize_mask(self, debug_info, res):
-        return cv2.resize(debug_info['mask'] * np.ones((1, 1, 3), dtype=np.float32), dsize=res, interpolation=cv2.INTER_NEAREST)
+        return cv2.resize(debug_info['mask'] * np.ones((1, 1, 3), dtype=np.float32), dsize=res,
+                          interpolation=cv2.INTER_NEAREST)
 
     def draw_high_res_text(self, text, canvas):
         cv2.putText(canvas, text, (30, 128), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), thickness=5)
         return canvas
+
 
 # Improved White Balance Filter
 class ImprovedWhiteBalanceFilter(Filter):
@@ -245,6 +259,7 @@ class ImprovedWhiteBalanceFilter(Filter):
     def process(self, img, param):
         return img * param[:, None, None, :]
 
+
 # Gamma Filter
 class GammaFilter(Filter):
     def __init__(self, net, cfg):
@@ -260,6 +275,7 @@ class GammaFilter(Filter):
     def process(self, img, param):
         param_1 = param.repeat(1, 3)
         return torch.pow(torch.clamp(img, min=0.001), param_1[:, None, None, :])
+
 
 # Tone Filter
 class ToneFilter(Filter):
@@ -280,9 +296,12 @@ class ToneFilter(Filter):
         tone_curve_sum = torch.sum(tone_curve, dim=4) + 1e-30
         total_image = img * 0
         for i in range(self.cfg.curve_steps):
-            total_image += torch.clamp(img - 1.0 * i / self.cfg.curve_steps, 0, 1.0 / self.cfg.curve_steps) * param[:, :, :, :, i]
+            total_image += torch.clamp(img - 1.0 * i / self.cfg.curve_steps, 0, 1.0 / self.cfg.curve_steps) * param[:,
+                                                                                                              :, :, :,
+                                                                                                              i]
         total_image *= self.cfg.curve_steps / tone_curve_sum
         return total_image
+
 
 # Contrast Filter
 class ContrastFilter(Filter):
@@ -300,6 +319,7 @@ class ContrastFilter(Filter):
         contrast_lum = -torch.cos(math.pi * luminance) * 0.5 + 0.5
         contrast_image = img / (luminance + 1e-6) * contrast_lum
         return lerp(img, contrast_image, param[:, :, None, None])
+
 
 # Usm Filter
 class UsmFilter(Filter):
