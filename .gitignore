@@ -2,10 +2,12 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+checkpoints/
 # C extensions
 *.so
-
+.idea/
+*.png
+pytorch_file/data/
 # Distribution / packaging
 .Python
 build/

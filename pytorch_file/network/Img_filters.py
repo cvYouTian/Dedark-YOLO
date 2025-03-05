@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+from pyexpat import features
 from torch import nn
 from pytorch_file.Utils.util_filters import lrelu, rgb2lum, tanh_range, lerp
 import math
@@ -19,16 +20,17 @@ class Filters(nn.Module):
         self.filter_parameters = None
 
     def get_begin_filter_parameter(self):
-        assert self.num_filter_parameters is not None, "num_filter_parameters is None"
         return self.begin_filter_parameter
 
     def get_num_filter_parameter(self):
-        return self.num_filter_parameters
+        assert self.num_filter_parameter is not None, "num_filter_parameter is None"
+        return self.num_filter_parameter
 
     def extract_parameters(self, features):
 
         return features[:, self.get_begin_filter_parameter():
-                           (self.get_begin_filter_parameter + self.get_num_filter_parameters())()]
+                           (self.get_begin_filter_parameter + self.get_num_filter_parameter())],
+                features[:]
 
     def forward(self, img, img_features = None,
                 specified_parameters = None, high_res = None):
