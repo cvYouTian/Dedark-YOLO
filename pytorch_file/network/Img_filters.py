@@ -77,7 +77,7 @@ class Filters(nn.Module):
             l=-filter_input_range, r=filter_input_range,
             initial=0)(mask_parameters)
         # TODO:这里要检查是不是pytorch的矩阵形式
-        size = list(map(int, img.shape[1:3]))
+        size = list(map(int, img.shape[2:]))
         grid = np.zeros(shape=[1] + size + [2], dtype=np.float32)
 
         shorter_edge = min(size[0], size[1])
@@ -143,6 +143,7 @@ class Filters(nn.Module):
         return low_res_output, filter_parameters
 
 class UsmFilter(Filters):
+    # 这个是锐化模块，out = img + param（img - Gua（img）
     def __init__(self, net, config):
         super().__init__(net, config)
         self.cfg = config
@@ -155,7 +156,8 @@ class UsmFilter(Filters):
         return tanh_range(*self.cfg.usm_range)(features)
 
     def process(self, img, param):
-        def make_gaussian_2d_kernel(sigma, dtype=torch.float32):
+        # 这里主要使用高斯卷积核对输入的图片进行高斯卷积处理
+        def make_gaussian_2d_kernel(sigma):
             # sigma是标准差
             radius = 12
             # 构建数据集
@@ -176,54 +178,62 @@ class UsmFilter(Filters):
         pad_w = (25 - 1) // 2
         # 对图像的宽高上进行填充, 仅针对最后俩个维度进行填充。
         padded = F.pad(img, [pad_w, pad_w, pad_w, pad_w], mode="reflect")
-        outputs = F.conv2d(padded, kernel_i, stride=1, padding=0)
-        # outputs = []
-        # for channel_idx in range(3):
-        #     data_c = padded[:, channel_idx:(channel_idx + 1), :, :]
-        #     data_c = tf.nn.conv2d(data_c, kernel_i, [1, 1, 1, 1], 'VALID')
-        #     outputs.append(data_c)
-
-        # output = torch.concat(outputs, dim=3)
-        output = torch.cat([outputs] * img.size(1), dim=1)
-        img_out = (img - output) * param[:, None, None, :] + img
+        outputs = F.conv2d(padded, kernel_i, stride=1, padding=0, groups=img.size(1))
+        # 计算加权融合，param是权值矩阵， 原图与滤波后的图像相减得到的是图像的高频图，之后再将图像的高频图进行权值分分配，分配后将其加回图像
+        img_out = (img - outputs) * param[:, :, None, None] + img
 
         return img_out
 
+
+class ImprovedWhiteBalanceFilter(Filters):
+    def __init__(self, net, config):
+        super().__init__(net, config)
+        self.short_name = 'W'
+        self.channels = 3
+        self.begin_filter_parameter = config.wb_begin_param
+        self.num_filter_parameters = self.channels
+
+    def filter_param_regressor(self, features):
+        # features.shape
+        log_wb_range = 0.5
+        mask = np.array(((0, 1, 1)), dtype=np.float32).reshape(1, 3)
+        # mask = np.array(((1, 0, 1)), dtype=np.float32).reshape(1, 3)
+
+        print(mask.shape)
+        assert mask.shape == (1, 3), "shape Error"
+
+        features = features * mask
+        color_scaling = torch.exp(tanh_range(-log_wb_range, log_wb_range)(features))
+        # There will be no division by zero here unless the WB range lower bound is 0
+        # normalize by luminance
+        color_scaling *= 1.0 / (1e-5 + 0.27 * color_scaling[:, 0] + 0.67 * color_scaling[:, 1] +
+                                       0.06 * color_scaling[:, 2])[:, None]
+        return color_scaling
+
+    def process(self, img, param):
+        return img * param[:, :, None, None]
+
+
+class ContrastFilter(Filters):
+    def __init__(self, net, config):
+        super().__init__(net, config)
+        self.short_name = 'Ct'
+        self.begin_filter_parameter = config.contrast_begin_param
+
+        self.num_filter_parameters = 1
+
+    def filter_param_regressor(self, features):
+        # return tf.sigmoid(features)
+        # return tanh_range(*self.cfg.contrast_range)(features)
+
+        return tf.tanh(features)
+
+    def process(self, img, param):
+        luminance = tf.minimum(tf.maximum(rgb2lum(img), 0.0), 1.0)
+        contrast_lum = -tf.cos(math.pi * luminance) * 0.5 + 0.5
+        contrast_image = img / (luminance + 1e-6) * contrast_lum
+        return lerp(img, contrast_image, param[:, :, None, None])
+
+
 if __name__ == '__main__':
-
-    def make_gaussian_2d_kernel(sigma, dtype=torch.float32):
-        # sigma是标准差
-        radius = 12
-        # 构建数据集
-        x = torch.arange(-radius, radius + 1, dtype=torch.float32)
-        # 高斯核化公式
-        a = torch.square(x / sigma)
-        print(a)
-
-        k = torch.exp(-0.5 * torch.square(x / sigma))
-        # 将所有的元素进行归一化
-        k = k / torch.sum(k)
-        # 返回张量的外积，（25, 25）
-        return torch.outer(k, k)
-
-        kernel_i = make_gaussian_2d_kernel(5)
-        print('kernel_i.shape', kernel_i.shape)
-        # kernel_i = tf.tile(kernel_i[:, :, tf.newaxis, tf.newaxis], [1, 1, 1, 1])
-        # (1, 1, 25, 25), 定义高斯卷积核
-        kernel_i = kernel_i.unsqueeze(0).unsqueeze(0)
-        # pading 12 pixels
-        pad_w = (25 - 1) // 2
-        # 对图像的宽高上进行填充, 仅针对最后俩个维度进行填充。
-        padded = F.pad(img, [pad_w, pad_w, pad_w, pad_w], mode="reflect")
-        outputs = F.conv2d(padded, kernel_i, stride=1, padding=0)
-        # outputs = []
-        # for channel_idx in range(3):
-        #     data_c = padded[:, channel_idx:(channel_idx + 1), :, :]
-        #     data_c = tf.nn.conv2d(data_c, kernel_i, [1, 1, 1, 1], 'VALID')
-        #     outputs.append(data_c)
-
-        # output = torch.concat(outputs, dim=3)
-        output = torch.cat([outputs] * img.size(1), dim=1)
-        img_out = (img - output) * param[:, None, None, :] + img
-
-        print(img_out)
+    pass
