@@ -1,10 +1,13 @@
 import torch
 import torch.nn.functional as F
 from pyexpat import features
+
+from ffmpeg import output
 from torch import nn
 from pytorch_file.Utils.util_filters import lrelu, rgb2lum, tanh_range, lerp
 import math
 import numpy as np
+
 
 
 class Filters(nn.Module):
@@ -103,6 +106,7 @@ class Filters(nn.Module):
         return mask
 
     def forward(self, img, img_features = None, specified_parameter = None, high_res = None):
+        # 注意forward的实参
         assert (img_features is None) ^ (specified_parameter is None), "Error"
 
         if img_features is not None:
@@ -147,31 +151,79 @@ class UsmFilter(Filters):
         self.num_filter_parameters = 1
 
     def filter_param_regressor(self, features):
+        # cfg.usm_range = (0.0, 2.5)
         return tanh_range(*self.cfg.usm_range)(features)
 
     def process(self, img, param):
-        def make_gaussian_2d_kernel(sigma, dtype=tf.float32):
+        def make_gaussian_2d_kernel(sigma, dtype=torch.float32):
+            # sigma是标准差
             radius = 12
-            x = tf.cast(tf.range(-radius, radius + 1), dtype=dtype)
-            k = tf.exp(-0.5 * tf.square(x / sigma))
-            k = k / tf.reduce_sum(k)
-            return tf.expand_dims(k, 1) * k
+            # 构建数据集
+            x = torch.arange(-radius, radius + 1, dtype=torch.float32)
+            # 高斯核化公式
+            k = torch.exp(-0.5 * torch.square(x / sigma))
+            # 将所有的元素进行归一化
+            k = k / torch.sum(k)
+            # 返回张量的外积，（25, 25）
+            return torch.outer(k, k)
 
         kernel_i = make_gaussian_2d_kernel(5)
         print('kernel_i.shape', kernel_i.shape)
-        kernel_i = tf.tile(kernel_i[:, :, tf.newaxis, tf.newaxis], [1, 1, 1, 1])
-
+        # kernel_i = tf.tile(kernel_i[:, :, tf.newaxis, tf.newaxis], [1, 1, 1, 1])
+        # (1, 1, 25, 25), 定义高斯卷积核
+        kernel_i = kernel_i.unsqueeze(0).unsqueeze(0)
+        # pading 12 pixels
         pad_w = (25 - 1) // 2
-        padded = tf.pad(img, [[0, 0], [pad_w, pad_w], [pad_w, pad_w], [0, 0]], mode='REFLECT')
-        outputs = []
-        for channel_idx in range(3):
-            data_c = padded[:, :, :, channel_idx:(channel_idx + 1)]
-            data_c = tf.nn.conv2d(data_c, kernel_i, [1, 1, 1, 1], 'VALID')
-            outputs.append(data_c)
+        # 对图像的宽高上进行填充, 仅针对最后俩个维度进行填充。
+        padded = F.pad(img, [pad_w, pad_w, pad_w, pad_w], mode="reflect")
+        outputs = F.conv2d(padded, kernel_i, stride=1, padding=0)
+        # outputs = []
+        # for channel_idx in range(3):
+        #     data_c = padded[:, channel_idx:(channel_idx + 1), :, :]
+        #     data_c = tf.nn.conv2d(data_c, kernel_i, [1, 1, 1, 1], 'VALID')
+        #     outputs.append(data_c)
 
-        output = torch.concat(outputs, dim=3)
+        # output = torch.concat(outputs, dim=3)
+        output = torch.cat([outputs] * img.size(1), dim=1)
         img_out = (img - output) * param[:, None, None, :] + img
 
         return img_out
 
+if __name__ == '__main__':
 
+    def make_gaussian_2d_kernel(sigma, dtype=torch.float32):
+        # sigma是标准差
+        radius = 12
+        # 构建数据集
+        x = torch.arange(-radius, radius + 1, dtype=torch.float32)
+        # 高斯核化公式
+        a = torch.square(x / sigma)
+        print(a)
+
+        k = torch.exp(-0.5 * torch.square(x / sigma))
+        # 将所有的元素进行归一化
+        k = k / torch.sum(k)
+        # 返回张量的外积，（25, 25）
+        return torch.outer(k, k)
+
+        kernel_i = make_gaussian_2d_kernel(5)
+        print('kernel_i.shape', kernel_i.shape)
+        # kernel_i = tf.tile(kernel_i[:, :, tf.newaxis, tf.newaxis], [1, 1, 1, 1])
+        # (1, 1, 25, 25), 定义高斯卷积核
+        kernel_i = kernel_i.unsqueeze(0).unsqueeze(0)
+        # pading 12 pixels
+        pad_w = (25 - 1) // 2
+        # 对图像的宽高上进行填充, 仅针对最后俩个维度进行填充。
+        padded = F.pad(img, [pad_w, pad_w, pad_w, pad_w], mode="reflect")
+        outputs = F.conv2d(padded, kernel_i, stride=1, padding=0)
+        # outputs = []
+        # for channel_idx in range(3):
+        #     data_c = padded[:, channel_idx:(channel_idx + 1), :, :]
+        #     data_c = tf.nn.conv2d(data_c, kernel_i, [1, 1, 1, 1], 'VALID')
+        #     outputs.append(data_c)
+
+        # output = torch.concat(outputs, dim=3)
+        output = torch.cat([outputs] * img.size(1), dim=1)
+        img_out = (img - output) * param[:, None, None, :] + img
+
+        print(img_out)
