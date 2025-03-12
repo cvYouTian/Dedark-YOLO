@@ -138,3 +138,40 @@ class Filters(nn.Module):
 
         return low_res_output, filter_parameters
 
+class UsmFilter(Filters):
+    def __init__(self, net, config):
+        super().__init__(net, config)
+        self.cfg = config
+        self.short_name = 'UF'
+        self.begin_filter_parameter = self.cfg.usm_begin_param
+        self.num_filter_parameters = 1
+
+    def filter_param_regressor(self, features):
+        return tanh_range(*self.cfg.usm_range)(features)
+
+    def process(self, img, param):
+        def make_gaussian_2d_kernel(sigma, dtype=tf.float32):
+            radius = 12
+            x = tf.cast(tf.range(-radius, radius + 1), dtype=dtype)
+            k = tf.exp(-0.5 * tf.square(x / sigma))
+            k = k / tf.reduce_sum(k)
+            return tf.expand_dims(k, 1) * k
+
+        kernel_i = make_gaussian_2d_kernel(5)
+        print('kernel_i.shape', kernel_i.shape)
+        kernel_i = tf.tile(kernel_i[:, :, tf.newaxis, tf.newaxis], [1, 1, 1, 1])
+
+        pad_w = (25 - 1) // 2
+        padded = tf.pad(img, [[0, 0], [pad_w, pad_w], [pad_w, pad_w], [0, 0]], mode='REFLECT')
+        outputs = []
+        for channel_idx in range(3):
+            data_c = padded[:, :, :, channel_idx:(channel_idx + 1)]
+            data_c = tf.nn.conv2d(data_c, kernel_i, [1, 1, 1, 1], 'VALID')
+            outputs.append(data_c)
+
+        output = torch.concat(outputs, dim=3)
+        img_out = (img - output) * param[:, None, None, :] + img
+
+        return img_out
+
+
