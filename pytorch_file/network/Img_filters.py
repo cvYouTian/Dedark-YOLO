@@ -1,10 +1,7 @@
 import torch
 import torch.nn.functional as F
-from pyexpat import features
-
-from ffmpeg import output
 from torch import nn
-from pytorch_file.Utils.util_filters import lrelu, rgb2lum, tanh_range, lerp
+from pytorch_file.Utils.util_filters import rgb2lum, tanh_range, lerp
 import math
 import numpy as np
 
@@ -142,6 +139,74 @@ class Filters(nn.Module):
 
         return low_res_output, filter_parameters
 
+
+class ImprovedWhiteBalanceFilter(Filters):
+    def __init__(self, net, config):
+        super().__init__(net, config)
+        self.short_name = 'W'
+        self.channels = 3
+        self.begin_filter_parameter = config.wb_begin_param
+        # the numbers of the whitebalance's parameter
+        self.num_filter_parameters = self.channels
+
+    def filter_param_regressor(self, features):
+        # features.shape
+        log_wb_range = 0.5
+        mask = np.array(((0, 1, 1)), dtype=np.float32).reshape(1, 3)
+
+        print(mask.shape)
+        assert mask.shape == (1, 3), "shape Error"
+
+        features = features * mask
+        # function ()
+        color_scaling = torch.exp(tanh_range(-log_wb_range, log_wb_range)(features))
+        color_scaling *= 1.0 / (1e-5 + 0.27 * color_scaling[:, 0] + 0.67 * color_scaling[:, 1] +
+                                       0.06 * color_scaling[:, 2]).unsqueeze(-1)
+        return color_scaling
+
+    def process(self, img, param):
+        return img * param.unsqueeze(-1).unsqueeze(-1)
+
+
+class GammaFilter(Filters):  # gamma_param is in [1/gamma_range, gamma_range]
+
+    def __init__(self, net, config):
+        super().__init__(net, config)
+        self.short_name = 'G'
+        # 3
+        self.begin_filter_parameter = config.gamma_begin_param
+        self.num_filter_parameters = 1
+
+    def filter_param_regressor(self, features):
+        log_gamma_range = np.log(self.cfg.gamma_range)
+        return torch.exp(tanh_range(-log_gamma_range, log_gamma_range)(features))
+
+    def process(self, img, param):
+        param_1 = param.repeat(1, 3)
+        return torch.pow(torch.clamp(img, 0.001), param_1.unsqueeze(-1).unsqueeze(-1))
+
+
+class ContrastFilter(Filters):
+    def __init__(self, net, config):
+        super().__init__(net, config)
+        self.short_name = 'Ct'
+        self.begin_filter_parameter = config.contrast_begin_param
+
+        self.num_filter_parameters = 1
+
+    def filter_param_regressor(self, features):
+
+        return torch.tanh(features)
+
+    def process(self, img, param):
+        luminance = torch.clamp(rgb2lum(img), 0.0, 1.0)
+        # function（）
+        contrast_lum = -torch.cos(math.pi * luminance) * 0.5 + 0.5
+        contrast_image = img / (luminance + 1e-6) * contrast_lum
+        # adjust weight
+        return lerp(img, contrast_image, param.unsqueeze(-1).unsqueeze(-1))
+
+
 class UsmFilter(Filters):
     # 这个是锐化模块，out = img + param（img - Gua（img）
     def __init__(self, net, config):
@@ -180,59 +245,9 @@ class UsmFilter(Filters):
         padded = F.pad(img, [pad_w, pad_w, pad_w, pad_w], mode="reflect")
         outputs = F.conv2d(padded, kernel_i, stride=1, padding=0, groups=img.size(1))
         # 计算加权融合，param是权值矩阵， 原图与滤波后的图像相减得到的是图像的高频图，之后再将图像的高频图进行权值分分配，分配后将其加回图像
-        img_out = (img - outputs) * param[:, :, None, None] + img
+        img_out = (img - outputs) * param.unsqueeze(-1).unsqueeze(-1) + img
 
         return img_out
-
-
-class ImprovedWhiteBalanceFilter(Filters):
-    def __init__(self, net, config):
-        super().__init__(net, config)
-        self.short_name = 'W'
-        self.channels = 3
-        self.begin_filter_parameter = config.wb_begin_param
-        self.num_filter_parameters = self.channels
-
-    def filter_param_regressor(self, features):
-        # features.shape
-        log_wb_range = 0.5
-        mask = np.array(((0, 1, 1)), dtype=np.float32).reshape(1, 3)
-        # mask = np.array(((1, 0, 1)), dtype=np.float32).reshape(1, 3)
-
-        print(mask.shape)
-        assert mask.shape == (1, 3), "shape Error"
-
-        features = features * mask
-        color_scaling = torch.exp(tanh_range(-log_wb_range, log_wb_range)(features))
-        # There will be no division by zero here unless the WB range lower bound is 0
-        # normalize by luminance
-        color_scaling *= 1.0 / (1e-5 + 0.27 * color_scaling[:, 0] + 0.67 * color_scaling[:, 1] +
-                                       0.06 * color_scaling[:, 2])[:, None]
-        return color_scaling
-
-    def process(self, img, param):
-        return img * param[:, :, None, None]
-
-
-class ContrastFilter(Filters):
-    def __init__(self, net, config):
-        super().__init__(net, config)
-        self.short_name = 'Ct'
-        self.begin_filter_parameter = config.contrast_begin_param
-
-        self.num_filter_parameters = 1
-
-    def filter_param_regressor(self, features):
-        # return tf.sigmoid(features)
-        # return tanh_range(*self.cfg.contrast_range)(features)
-
-        return tf.tanh(features)
-
-    def process(self, img, param):
-        luminance = tf.minimum(tf.maximum(rgb2lum(img), 0.0), 1.0)
-        contrast_lum = -tf.cos(math.pi * luminance) * 0.5 + 0.5
-        contrast_image = img / (luminance + 1e-6) * contrast_lum
-        return lerp(img, contrast_image, param[:, :, None, None])
 
 
 if __name__ == '__main__':
