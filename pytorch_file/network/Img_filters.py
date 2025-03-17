@@ -217,7 +217,7 @@ class UsmFilter(Filters):
         # kernel_i = tf.tile(kernel_i[:, :, tf.newaxis, tf.newaxis], [1, 1, 1, 1])
         # (1, 1, 25, 25), 定义高斯卷积核
 
-        kernel_i = kernel_i.unsqueeze(0).unsqueeze(0).repeat(img.shape[1], 1, 1, 1)
+        kernel_i = kernel_i.unsqueeze(0).unsqueeze(0).repeat(img.shape[1], 1, 1, 1).to(self.cfg.device)
         # pading 12 pixels
         pad_w = (25 - 1) // 2
         # 对图像的宽高上进行填充, 仅针对最后俩个维度进行填充。

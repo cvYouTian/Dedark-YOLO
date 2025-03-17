@@ -89,6 +89,7 @@ class DetectionHead(nn.Module):
         self.anchor_per_scale = len(anchors)
         self.stride = stride
         self.anchors = anchors
+        self.device = cfg.device
 
     def conv_shape(self, input_data):
         # [b, c, h, w]
@@ -128,9 +129,9 @@ class DetectionHead(nn.Module):
         xy_grid = torch.stack([x, y], dim=-1)
         xy_grid = xy_grid[None, :, :, None, :].repeat(batch_size, 1, 1, self.anchor_per_scale, 1)
 
-        pred_xy = (torch.sigmoid(conv_raw_dxdy) + xy_grid) * self.stride
-        anchors = torch.from_numpy(self.anchors).float()
-        e = torch.exp(conv_raw_dwdh)
+        pred_xy = (torch.sigmoid(conv_raw_dxdy.to(self.device)) + xy_grid.to(self.device)) * self.stride
+        anchors = torch.from_numpy(self.anchors).float().to(self.device)
+        e = torch.exp(conv_raw_dwdh).to(self.device)
         pred_wh = (e * anchors) * self.stride
         pred_xywh = torch.concat([pred_xy, pred_wh], dim=-1)
 
@@ -202,7 +203,7 @@ class SubNet(nn.Module):
 class YOLOV3(nn.Module):
     def __init__(self, num_class, isp_flag=False):
         super(YOLOV3, self).__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = cfg.device
         # 配置文件
         self.num_class = num_class
         # [3, 3, 2]的np数组
@@ -264,7 +265,6 @@ class YOLOV3(nn.Module):
 
     def _filtered(self, input_processed, input_clean):
         # 这里处理的都是batch
-        self.filter_params = input_processed
         filtered_pipline = []
 
         if self.isp_flag:
@@ -284,13 +284,13 @@ class YOLOV3(nn.Module):
                 filters_parameters.append(filtered_param)
                 filtered_pipline.append(input_processed)
 
-            self.filter_params = filters_parameters
-        self.image_filtered = input_processed
-        self.filtered_pipline = filtered_pipline
+            filter_params = filters_parameters
+        image_filtered = input_processed
+        filtered_pipline = filtered_pipline
 
-        recovery_loss = torch.sum((self.image_filtered - input_clean) ** 2.0)
+        recovery_loss = torch.sum((image_filtered.to(self.device) - input_clean.to(self.device)) ** 2.0)
 
-        return self.image_filtered, self.filtered_pipline, recovery_loss
+        return image_filtered, filtered_pipline, recovery_loss
 
     def forward(self, x, input_clean):
         # 滤波操作

@@ -12,6 +12,7 @@ from Utils.utils import read_class_names
 from data.dataset import YoloDataset
 from network.model import YOLOV3
 
+
 class YOLOTrainer:
     def __init__(self, args, cfg):
         self.args = args
@@ -170,6 +171,5 @@ class YOLOTrainer:
 
 # 使用示例
 if __name__ == '__main__':
-
     trainer = YOLOTrainer(args, cfg)
     trainer.train()
