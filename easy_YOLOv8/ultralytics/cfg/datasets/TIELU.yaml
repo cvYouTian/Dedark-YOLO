@@ -1,0 +1,11 @@
+path: /home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data
+train: # train images (relative to '
+  - train/images
+val: # val images (relative to
+  - test/images
+test: # test images (optional)
+  - test/images
+
+# Classes
+names:
+  0: person
