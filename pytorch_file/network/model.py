@@ -4,7 +4,7 @@ import numpy as np
 from pytorch_file.Utils.utils import get_anchors
 import torch.nn.functional as F
 from pytorch_file.configs.config_lowlight import cfg
-from pytorch_file.network.Img_filters import ImprovedWhiteBalanceFilter, GammaFilter, ToneFilter, ContrastFilter, UsmFilter
+from pytorch_file.network.Img_filters import ImprovedWhiteBalanceFilter, GammaFilter, ContrastFilter, UsmFilter
 
 
 class DBL(nn.Module):

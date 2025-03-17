@@ -5,6 +5,7 @@ __pycache__/
 checkpoints/
 # C extensions
 *.so
+pytorch_file/Graph-of-Paper/
 .idea/
 *.png
 pytorch_file/data/

@@ -9,8 +9,8 @@ import math
 # Command line arguments
 parser = argparse.ArgumentParser(description='')
 parser.add_argument('--exp_num', dest='exp_num', type=str, default='58', help='current experiment number')
-parser.add_argument('--epoch_first_stage', dest='epoch_first_stage', type=int, default=0, help='# of epochs')
-parser.add_argument('--epoch_second_stage', dest='epoch_second_stage', type=int, default=70, help='# of epochs')
+parser.add_argument('--epoch_first_stage', dest='epoch_first_stage', type=int, default=0, help='not set zero if use pre_train')
+parser.add_argument('--epoch_second_stage', dest='epoch_second_stage', type=int, default=70, help='all of the epochs')
 parser.add_argument('--use_gpu', dest='use_gpu', type=int, default=1, help='gpu flag, 1 for GPU and 0 for CPU')
 parser.add_argument('--checkpoint_dir', dest='ckpt_dir', default='checkpoint', help='models are saved here')
 parser.add_argument('--exp_dir', dest='exp_dir', default='./experiments_lowlight', help='models are saved here')

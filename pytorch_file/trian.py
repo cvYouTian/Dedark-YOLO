@@ -7,7 +7,7 @@ from configs.config_lowlight import args, cfg
 import time
 from network.loss import YOLOLoss
 import os
-from Utils.utils import read_class_names, write_mes
+from Utils.utils import read_class_names
 from data.dataset import YoloDataset
 from network.model import YOLOV3
 
@@ -66,7 +66,7 @@ class YOLOTrainer:
             self.model.load_state_dict(torch.load(self.initial_weight))
 
         else:
-            print('=> %s does not exist !!!' % self.initial_weight)
+            print('=> pre_train not im... !!!')
             print('=> Now it starts to train YOLOV3 from scratch ...')
             self.first_stage_epochs = 0
 
