@@ -85,7 +85,7 @@ class YOLOTrainer:
                             true_sbboxes, true_mbboxes, true_lbboxes) in enumerate(pbar):
                 # 低光照增强
                 if self.args.lowlight_FLAG:
-                    lowlight_param = torch.rand(1) * 5 + 5  # [5, 10]
+                    lowlight_param = torch.rand(1) * 5 + 1  # [1, 6]
                     enhanced_images = input_data ** lowlight_param.item()
                 else:
                     print("not implement lowlight train!!")

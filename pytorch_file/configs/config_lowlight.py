@@ -6,42 +6,42 @@ from easydict import EasyDict as edict
 import cv2
 import math
 
-# Command line arguments
 parser = argparse.ArgumentParser(description='')
 parser.add_argument('--exp_num', dest='exp_num', type=str, default='58', help='current experiment number')
-parser.add_argument('--epoch_first_stage', dest='epoch_first_stage', type=int, default=0, help='not set zero if use pre_train')
-parser.add_argument('--epoch_second_stage', dest='epoch_second_stage', type=int, default=70, help='all of the epochs')
-parser.add_argument('--use_gpu', dest='use_gpu', type=int, default=1, help='gpu flag, 1 for GPU and 0 for CPU')
+parser.add_argument('--epoch_first_stage', dest='epoch_first_stage', type=int, default=20, help='# of epochs')
+parser.add_argument('--epoch_second_stage', dest='epoch_second_stage', type=int, default=70, help='# of epochs')
+parser.add_argument('--use_gpu', dest='use_gpu', type=int, default=0, help='gpu flag, 1 for GPU and 0 for CPU')
 parser.add_argument('--checkpoint_dir', dest='ckpt_dir', default='checkpoint', help='models are saved here')
+# parser.add_argument('--exp_dir', dest='exp_dir', default='./experiments_lowlight', help='models are saved here')
 parser.add_argument('--exp_dir', dest='exp_dir', default='./experiments_lowlight', help='models are saved here')
-parser.add_argument('--gpu_id', dest='gpu_id', type=str, default='0', help='if use gpu, use gpu device id')
+parser.add_argument('--gpu_id', dest='gpu_id', type=str, default='5', help='if use gpu, use gpu device id')
 parser.add_argument('--ISP_FLAG', dest='ISP_FLAG', type=bool, default=True, help='whether use isp')
-parser.add_argument('--lowlight_FLAG', dest='lowlight_FLAG', type=bool, default=True,
-                    help='whether use Hybrid data training')
-parser.add_argument('--train_path', dest='train_path', nargs='*',
-                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data/tielu_train.txt',
-                    help='folder of the training data')
-parser.add_argument('--test_path', dest='test_path', nargs='*',
-                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data/tielu_test.txt',
-                    help='folder of the training data')
-parser.add_argument('--class_name', dest='class_name', nargs='*',
-                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data/tielu_dark.names',
-                    help='folder of the training data')
-parser.add_argument('--WRITE_IMAGE_PATH', dest='WRITE_IMAGE_PATH', nargs='*',
-                    default='./experiments_lowlight/exp_58/detection_vocnorm_test/', help='folder of the training data')
-parser.add_argument('--WEIGHT_FILE', dest='WEIGHT_FILE', nargs='*',
-                    default='./experiments_lowlight/exp_58/checkpoint/yolov3_test_loss=25.2496.ckpt-15',
-                    help='folder of the training data')
-parser.add_argument('--pre_train', dest='pre_train',
-                    default='NULL', help='the path of pretrained models if is not null. not used for now')
+parser.add_argument('--lowlight_FLAG', dest='lowlight_FLAG', type=bool, default=True, help='whether use Hybrid data training')
+# linux
+# parser.add_argument('--train_path', dest='train_path', nargs='*', default='./data/dataset_dark/tielu_train.txt', help='folder of the training data')
+# parser.add_argument('--test_path', dest='test_path', nargs='*', default='./data/dataset_dark/tielu_test.txt', help='folder of the training data')
+# parser.add_argument('--class_name', dest='class_name', nargs='*', default='./data/classes/tielu_dark.names', help='folder of the training data')
+# parser.add_argument('--WEIGHT_FILE', dest='WEIGHT_FILE', nargs='*', default='./experiments_lowlight/exp_58/checkpoint/yolov3_test_loss=9.0280.ckpt-71', help='folder of the training data')
+# win
+parser.add_argument('--train_path', dest='train_path', nargs='*', default=r'D:\project\Image-Adaptive-YOLO-main\data\dataset_dark\tielu_train.txt', help='folder of the training data')
+parser.add_argument('--test_path', dest='test_path', nargs='*', default=r'D:\project\Image-Adaptive-YOLO-main\data\dataset_dark\tielu_test.txt', help='folder of the training data')
+parser.add_argument('--class_name', dest='class_name', nargs='*', default=r'D:\project\Image-Adaptive-YOLO-main\data\classes\tielu_dark.names', help='folder of the training data')
+# 这里的路径后面要加入斜线
+parser.add_argument('--WRITE_IMAGE_PATH', dest='WRITE_IMAGE_PATH', nargs='*', default='D:\\project\\Image-Adaptive-YOLO-main\\experiments_lowlight\\exp_58\\detection_test\\', help='folder of the training data')
+parser.add_argument('--WEIGHT_FILE', dest='WEIGHT_FILE', nargs='*', default='D:\project\Image-Adaptive-YOLO-main\experiments_lowlight\exp_58\checkpoint\yolov3_test_loss=9.0280.ckpt-71', help='folder of the training data')
+
+parser.add_argument('--pre_train', dest='pre_train', default='./experiments_lowlight/exp_58/checkpoint1/yolov3_test_loss=25.2496.ckpt-15', help='the path of pretrained models if is not null. not used for now')
+# we trained our model from scratch.
+
 args = parser.parse_args()
+
 
 # Configuration
 __C = edict()
 cfg = __C
 
 # Filter Parameters
-cfg.filters = ['ImprovedWhiteBalanceFilter', 'GammaFilter', 'ToneFilter', 'ContrastFilter', 'UsmFilter']
+cfg.filters = ['ImprovedWhiteBalanceFilter', 'GammaFilter', 'ContrastFilter', 'UsmFilter']
 cfg.num_filter_parameters = 14
 cfg.device = "cuda" if args.use_gpu == 1 else "cpu"
 cfg.wb_begin_param = 0
@@ -77,7 +77,7 @@ cfg.feature_extractor_dims = 4096
 # YOLO options
 __C.YOLO = edict()
 __C.YOLO.CLASSES = args.class_name
-__C.YOLO.ANCHORS = "/home/youtian/Documents/pro/pyCode/Dedark-YOLO/pytorch_file/data/baseline_anchors.txt"
+__C.YOLO.ANCHORS = "D:\\project\\Dedark-YOLO\\pytorch_file\\baseline_anchors.txt"
 __C.YOLO.MOVING_AVE_DECAY = 0.9995
 __C.YOLO.STRIDES = [8, 16, 32]
 __C.YOLO.ANCHOR_PER_SCALE = 3

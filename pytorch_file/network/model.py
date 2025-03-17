@@ -278,7 +278,7 @@ class YOLOV3(nn.Module):
 
             for i, filter in enumerate(filters):
                 # 传入一张处理后的图片和一张
-                input_processed, filtered_param = filter.apply(input_processed, fine_tune)
+                input_processed, filtered_param = filter(input_processed, fine_tune)
                 filters_parameters.append(filtered_param)
                 filtered_pipline.append(input_processed)
 

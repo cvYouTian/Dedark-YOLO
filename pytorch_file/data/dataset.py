@@ -37,24 +37,24 @@ class YoloDataset(Dataset):
         np.random.shuffle(annotations)
         return annotations
 
-    def process_boxes(self):
-        self.train_output_sizes = self.train_input_size // self.strides
-
-        batch_image = np.zeros((self.batch_size, self.train_input_size, self.train_input_size, 3))
-
-        batch_label_sbbox = np.zeros((self.batch_size, self.train_output_sizes[0], self.train_output_sizes[0],
-                                      self.anchor_per_scale, 5 + self.num_classes))
-        batch_label_mbbox = np.zeros((self.batch_size, self.train_output_sizes[1], self.train_output_sizes[1],
-                                      self.anchor_per_scale, 5 + self.num_classes))
-        batch_label_lbbox = np.zeros((self.batch_size, self.train_output_sizes[2], self.train_output_sizes[2],
-                                      self.anchor_per_scale, 5 + self.num_classes))
-
-        batch_sbboxes = np.zeros((self.batch_size, self.max_bbox_per_scale, 4))
-        batch_mbboxes = np.zeros((self.batch_size, self.max_bbox_per_scale, 4))
-        batch_lbboxes = np.zeros((self.batch_size, self.max_bbox_per_scale, 4))
-
-        return (batch_image, batch_label_sbbox, batch_label_mbbox, batch_label_lbbox,
-                batch_sbboxes, batch_mbboxes, batch_lbboxes)
+    # def process_boxes(self):
+    #     self.train_output_sizes = self.train_input_size // self.strides
+    #
+    #     batch_image = np.zeros((self.batch_size, self.train_input_size, self.train_input_size, 3))
+    #
+    #     batch_label_sbbox = np.zeros((self.batch_size, self.train_output_sizes[0], self.train_output_sizes[0],
+    #                                   self.anchor_per_scale, 5 + self.num_classes))
+    #     batch_label_mbbox = np.zeros((self.batch_size, self.train_output_sizes[1], self.train_output_sizes[1],
+    #                                   self.anchor_per_scale, 5 + self.num_classes))
+    #     batch_label_lbbox = np.zeros((self.batch_size, self.train_output_sizes[2], self.train_output_sizes[2],
+    #                                   self.anchor_per_scale, 5 + self.num_classes))
+    #
+    #     batch_sbboxes = np.zeros((self.batch_size, self.max_bbox_per_scale, 4))
+    #     batch_mbboxes = np.zeros((self.batch_size, self.max_bbox_per_scale, 4))
+    #     batch_lbboxes = np.zeros((self.batch_size, self.max_bbox_per_scale, 4))
+    #
+    #     return (batch_image, batch_label_sbbox, batch_label_mbbox, batch_label_lbbox,
+    #             batch_sbboxes, batch_mbboxes, batch_lbboxes)
 
     def __getitem__(self, idx):
 
@@ -171,7 +171,7 @@ class YoloDataset(Dataset):
             bbox_coor = bbox[:4]
             bbox_class_ind = bbox[4]
 
-            onehot = np.zeros(self.num_classes, dtype=np.float)
+            onehot = np.zeros(self.num_classes, dtype=np.float32)
             onehot[bbox_class_ind] = 1.0
             uniform_distribution = np.full(self.num_classes, 1.0 / self.num_classes)
             deta = 0.01

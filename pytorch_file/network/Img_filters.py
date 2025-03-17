@@ -29,8 +29,8 @@ class Filters(nn.Module):
         return self.begin_filter_parameter
 
     def get_num_filter_parameters(self):
-        assert self.num_filter_parameter is not None, "num_filter_parameter is None"
-        return self.num_filter_parameter
+        assert self.num_filter_parameters is not None, "num_filter_parameter is None"
+        return self.num_filter_parameters
 
     def extract_parameters(self, features):
         # 抽取滤波参数的特征
@@ -156,7 +156,7 @@ class ImprovedWhiteBalanceFilter(Filters):
 
         print(mask.shape)
         assert mask.shape == (1, 3), "shape Error"
-
+        mask = torch.from_numpy(mask).to(features.device)
         features = features * mask
         # function ()
         color_scaling = torch.exp(tanh_range(-log_wb_range, log_wb_range)(features))
