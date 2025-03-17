@@ -19,11 +19,10 @@ class YoloDataset(Dataset):
         self.num_classes = len(self.classes)
         self.anchors = np.array(utils.get_anchors(cfg.YOLO.ANCHORS))
         self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE
-        self.max_bbox_per_scale = 150
+        self.max_bbox_per_scale = 100
 
         self.annotations = self.load_annotations()
         self.num_samples = len(self.annotations)
-        # 544
         self.train_input_size = self.input_sizes
         self.train_output_sizes = self.train_input_size // self.strides
 
@@ -37,32 +36,14 @@ class YoloDataset(Dataset):
         np.random.shuffle(annotations)
         return annotations
 
-    # def process_boxes(self):
-    #     self.train_output_sizes = self.train_input_size // self.strides
-    #
-    #     batch_image = np.zeros((self.batch_size, self.train_input_size, self.train_input_size, 3))
-    #
-    #     batch_label_sbbox = np.zeros((self.batch_size, self.train_output_sizes[0], self.train_output_sizes[0],
-    #                                   self.anchor_per_scale, 5 + self.num_classes))
-    #     batch_label_mbbox = np.zeros((self.batch_size, self.train_output_sizes[1], self.train_output_sizes[1],
-    #                                   self.anchor_per_scale, 5 + self.num_classes))
-    #     batch_label_lbbox = np.zeros((self.batch_size, self.train_output_sizes[2], self.train_output_sizes[2],
-    #                                   self.anchor_per_scale, 5 + self.num_classes))
-    #
-    #     batch_sbboxes = np.zeros((self.batch_size, self.max_bbox_per_scale, 4))
-    #     batch_mbboxes = np.zeros((self.batch_size, self.max_bbox_per_scale, 4))
-    #     batch_lbboxes = np.zeros((self.batch_size, self.max_bbox_per_scale, 4))
-    #
-    #     return (batch_image, batch_label_sbbox, batch_label_mbbox, batch_label_lbbox,
-    #             batch_sbboxes, batch_mbboxes, batch_lbboxes)
 
     def __getitem__(self, idx):
 
         annotation = self.annotations[idx]
         image, bboxes = self.parse_annotation(annotation)
         label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes = self.preprocess_true_boxes(bboxes)
-
-        image = torch.from_numpy(image).permute(2, 0, 1).float()  # HWC -> CHW
+        # 这里是第一次调整为pytorch的尺寸
+        image_tensor = torch.from_numpy(image).permute(2, 0, 1).float()
         label_sbbox = torch.from_numpy(label_sbbox).float()
         label_mbbox = torch.from_numpy(label_mbbox).float()
         label_lbbox = torch.from_numpy(label_lbbox).float()
@@ -70,7 +51,7 @@ class YoloDataset(Dataset):
         mbboxes = torch.from_numpy(mbboxes).float()
         lbboxes = torch.from_numpy(lbboxes).float()
 
-        return image, label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes
+        return image_tensor, label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes
 
     def random_horizontal_flip(self, image, bboxes):
         if random.random() < 0.5:

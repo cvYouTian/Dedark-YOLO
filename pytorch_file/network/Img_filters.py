@@ -46,12 +46,6 @@ class Filters(nn.Module):
     def process(self, img, param):
         assert False
 
-    def debug_info_batched(self):
-        return False
-
-    def no_high_res(self):
-        return False
-
     def use_masking(self):
         return self.cfg.masking
 
@@ -102,7 +96,7 @@ class Filters(nn.Module):
 
         return mask
 
-    def forward(self, img, img_features = None, specified_parameter = None, high_res = None):
+    def forward(self, img, img_features = None, specified_parameter = None):
         # 注意forward的实参
         assert (img_features is None) ^ (specified_parameter is None), "Error"
 
@@ -117,25 +111,9 @@ class Filters(nn.Module):
             # 做了一个空的mask参数矩阵，全零【1, N】
             mask_parameters = torch.zeros((1, self.get_num_filter_parameters()), dtype=torch.float32)
 
-        debug_info = dict()
-        if self.debug_info_batched():
-            debug_info["filter_parameters"] = filter_parameters
-        else:
-            debug_info["filter_parameters"] = filter_parameters[0]
-
         # output by processed
         low_res_output = self.process(img, filter_parameters)
 
-        if high_res is not None:
-            if self.no_high_res():
-                high_res_output = high_res
-            else:
-                self.high_res_mask = self.get_mask(high_res, mask_parameters)
-                high_res_output = lerp(high_res,
-                                       self.process(high_res, filter_parameters),
-                                       self.high_res_mask)
-        else:
-            high_res_output = None
 
         return low_res_output, filter_parameters
 
@@ -160,7 +138,7 @@ class ImprovedWhiteBalanceFilter(Filters):
         features = features * mask
         # function ()
         color_scaling = torch.exp(tanh_range(-log_wb_range, log_wb_range)(features))
-        color_scaling *= 1.0 / (1e-5 + 0.27 * color_scaling[:, 0] + 0.67 * color_scaling[:, 1] +
+        color_scaling =color_scaling * 1.0 / (1e-5 + 0.27 * color_scaling[:, 0] + 0.67 * color_scaling[:, 1] +
                                        0.06 * color_scaling[:, 2]).unsqueeze(-1)
         return color_scaling
 
@@ -238,12 +216,13 @@ class UsmFilter(Filters):
         print('kernel_i.shape', kernel_i.shape)
         # kernel_i = tf.tile(kernel_i[:, :, tf.newaxis, tf.newaxis], [1, 1, 1, 1])
         # (1, 1, 25, 25), 定义高斯卷积核
-        kernel_i = kernel_i.unsqueeze(0).unsqueeze(0)
+
+        kernel_i = kernel_i.unsqueeze(0).unsqueeze(0).repeat(img.shape[1], 1, 1, 1)
         # pading 12 pixels
         pad_w = (25 - 1) // 2
         # 对图像的宽高上进行填充, 仅针对最后俩个维度进行填充。
         padded = F.pad(img, [pad_w, pad_w, pad_w, pad_w], mode="reflect")
-        outputs = F.conv2d(padded, kernel_i, stride=1, padding=0, groups=img.size(1))
+        outputs = F.conv2d(padded, kernel_i, stride=1, padding=0, groups=img.shape[1])
         # 计算加权融合，param是权值矩阵， 原图与滤波后的图像相减得到的是图像的高频图，之后再将图像的高频图进行权值分分配，分配后将其加回图像
         img_out = (img - outputs) * param.unsqueeze(-1).unsqueeze(-1) + img
 

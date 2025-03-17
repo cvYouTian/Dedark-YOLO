@@ -129,7 +129,9 @@ class DetectionHead(nn.Module):
         xy_grid = xy_grid[None, :, :, None, :].repeat(batch_size, 1, 1, self.anchor_per_scale, 1)
 
         pred_xy = (torch.sigmoid(conv_raw_dxdy) + xy_grid) * self.stride
-        pred_wh = (torch.exp(conv_raw_dwdh) * self.anchors) * self.stride
+        anchors = torch.from_numpy(self.anchors).float()
+        e = torch.exp(conv_raw_dwdh)
+        pred_wh = (e * anchors) * self.stride
         pred_xywh = torch.concat([pred_xy, pred_wh], dim=-1)
 
         pred_conf = torch.sigmoid(conv_raw_conf)
@@ -148,29 +150,29 @@ class SubNet(nn.Module):
         self.conv_layers = nn.Sequential(
             # 第0层: 3x3 卷积，输入通道3，输出通道16，下采样
             nn.Conv2d(3, channels, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.1, inplace=False),
 
             # 第1层: 3x3 卷积，通道数翻倍
             nn.Conv2d(channels, 2 * channels, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.1, inplace=False),
 
             # 第2层: 3x3 卷积，保持通道数
             nn.Conv2d(2 * channels, 2 * channels, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.1, inplace=False),
 
             # 第3层: 3x3 卷积，保持通道数
             nn.Conv2d(2 * channels, 2 * channels, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.1, inplace=False),
 
             # 第4层: 3x3 卷积，保持通道数
             nn.Conv2d(2 * channels, 2 * channels, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.LeakyReLU(0.1, inplace=True)
+            nn.LeakyReLU(0.1, inplace=False)
         )
 
         # 全连接层
         self.fc_layers = nn.Sequential(
             nn.Linear(2048, 64),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.1, inplace=False),
             nn.Linear(64, self.output_dim)
         )
 

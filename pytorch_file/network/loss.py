@@ -14,6 +14,7 @@ class YOLOLoss(nn.Module):
         self.anchors = get_anchors(cfg.YOLO.ANCHORS)
         # 定义下采样率[8, 16, 32]
         self.strides = np.array(cfg.YOLO.STRIDES)
+        self.iou_loss_thresh = cfg.YOLO.IOU_LOSS_THRESH
         self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE
         self.num_classes = len(read_class_names(cfg.YOLO.CLASSES))
 
@@ -50,14 +51,14 @@ class YOLOLoss(nn.Module):
         left_up = torch.maximum(boxes1[..., :2], boxes2[..., :2])
         right_down = torch.minimum(boxes1[..., 2:], boxes2[..., 2:])
 
-        inter_section = torch.maximum(right_down - left_up, 0.0)
+        inter_section = torch.maximum(right_down - left_up, torch.tensor(0.0))
         inter_area = inter_section[..., 0] * inter_section[..., 1]
         union_area = boxes1_area + boxes2_area - inter_area
         iou = inter_area / union_area
 
         enclose_left_up = torch.minimum(boxes1[..., :2], boxes2[..., :2])
         enclose_right_down = torch.maximum(boxes1[..., 2:], boxes2[..., 2:])
-        enclose = torch.maximum(enclose_right_down - enclose_left_up, 0.0)
+        enclose = torch.maximum(enclose_right_down - enclose_left_up, torch.tensor(0.0))
         enclose_area = enclose[..., 0] * enclose[..., 1]
 
         giou = iou - 1.0 * (enclose_area - union_area) / enclose_area
@@ -77,21 +78,21 @@ class YOLOLoss(nn.Module):
         left_up = torch.maximum(boxes1[..., :2], boxes2[..., :2])
         right_down = torch.minimum(boxes1[..., 2:], boxes2[..., 2:])
 
-        inter_section = torch.maximum(right_down - left_up, 0.0)
+        inter_section = torch.maximum(right_down - left_up, torch.tensor(0.0))
         inter_area = inter_section[..., 0] * inter_section[..., 1]
         union_area = boxes1_area + boxes2_area - inter_area
         iou = 1.0 * inter_area / union_area
 
         return iou
 
-    def loss_layer(self, conv, pred, label, bboxes, anchors, stride):
+    def loss_layer(self, conv, pred, label, bboxes, stride):
         conv_shape = conv.shape
         batch_size = conv_shape[0]
         # 注意这里和tensorflow的区别
         output_size = conv_shape[2]
 
         input_size = stride * output_size
-
+        # 将其转化成bhwc的tensor
         conv = conv.permute(0,2,3,1).contiguous()
         conv = conv.view(batch_size, output_size, output_size,self.anchor_per_scale, 5 + self.num_classes)
 
@@ -117,7 +118,7 @@ class YOLOLoss(nn.Module):
         # 计算 IoU 和背景掩码
         iou = self.bbox_iou(pred_xywh[:, :, :, :, None, :], bboxes[:, None, None, None, :, :])
         max_iou = torch.max(iou, dim=-1, keepdim=True)
-        respond_bgd = (1.0 - respond_bbox) * (max_iou < self.iou_loss_thresh).float()
+        respond_bgd = (1.0 - respond_bbox) * (max_iou.values < self.iou_loss_thresh).float()
 
         # 计算置信度损失
         conf_focal = self.focal(respond_bbox, pred_conf)
@@ -137,9 +138,9 @@ class YOLOLoss(nn.Module):
         return giou_loss, conf_loss, prob_loss
 
     def forward(self, conv, pred, label, true_bbox, recovery):
-        loss_sbbox = self.loss_layer(conv[0], pred[0], label[0], true_bbox[0], anchors=self.anchors[0], stride=self.stride[0])
-        loss_mbbox = self.loss_layer(conv[1], pred[1], label[1], true_bbox[1], anchors=self.anchors[1], stride=self.stride[1])
-        loss_lbbox = self.loss_layer(conv[2], pred[2], label[2], true_bbox[2], anchors=self.anchors[2], stride=self.stride[2])
+        loss_sbbox = self.loss_layer(conv[0], pred[0], label[0], true_bbox[0], stride=self.strides[0])
+        loss_mbbox = self.loss_layer(conv[1], pred[1], label[1], true_bbox[1], stride=self.strides[1])
+        loss_lbbox = self.loss_layer(conv[2], pred[2], label[2], true_bbox[2], stride=self.strides[2])
 
         # 实现 GIoU 损失、置信度损失、类别损失和恢复损失
         giou_loss = loss_sbbox[0] + loss_mbbox[0] + loss_lbbox[0]

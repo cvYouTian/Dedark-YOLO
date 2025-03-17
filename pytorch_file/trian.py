@@ -1,4 +1,5 @@
 import torch
+# torch.autograd.set_detect_anomaly(True)
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
@@ -169,5 +170,6 @@ class YOLOTrainer:
 
 # 使用示例
 if __name__ == '__main__':
+
     trainer = YOLOTrainer(args, cfg)
     trainer.train()
