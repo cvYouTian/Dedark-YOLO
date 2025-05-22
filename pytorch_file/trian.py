@@ -1,5 +1,4 @@
 import torch
-# torch.autograd.set_detect_anomaly(True)
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
@@ -118,7 +117,6 @@ class YOLOTrainer:
                 total_loss.backward()
                 self.optimizer.step()
 
-                # 记录日志...
 
             # 验证步骤
             self.model.eval()
