@@ -16,7 +16,7 @@ from ultralytics import YOLO, RTDETR
 
 def train():
     # Load a model
-    model = YOLO('yolov8l.yaml')
+    model = YOLO('yolov8n.yaml')
     # model = RTDETR('rtdetr-l.yaml')
     # print(model)
     # model = YOLO('yolov8m.pt')

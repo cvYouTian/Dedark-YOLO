@@ -1,15 +1,19 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import logging
 from contextlib import contextmanager
 import numpy as np
-from util_filters import rgb2lum, tanh_range, lerp
+from .util_filters import rgb2lum, tanh_range, lerp
 import cv2 as cv
 import math
 
 
-class Filter:
-    def __init__(self, net, cfg):
+__all__ = ("Filter", "UsmFilter", "GammaFilter", "ImprovedWhiteBalanceFilter", "ContrastFilter", "ToneFilter")
+
+class Filter(nn.Module):
+    def __init__(self,cfg):
+        super().__init__()
         self.cfg = cfg
         self.num_filter_parameters = None
         self.short_name = None
@@ -44,8 +48,7 @@ class Filter:
     def no_high_res(self):
         return False
 
-    def apply(self,
-              img,
+    def forward(self,img,
               img_features=None,
               specified_parameter=None,
               high_res=None):
@@ -145,24 +148,9 @@ class Filter:
         return canvas
 
 
-class ExposureFilter(Filter):
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
-        self.short_name = 'E'
-        self.begin_filter_parameter = cfg.exposure_begin_param
-        self.num_filter_parameters = 1
-
-    def filter_param_regressor(self, features):
-        return tanh_range(
-            -self.cfg.exposure_range, self.cfg.exposure_range, initial=0)(features)
-
-    def process(self, img, param):
-        return img * torch.exp(param[:, None, None, :] * np.log(2))
-
-
 class UsmFilter(Filter):
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
+    def __init__(self, cfg):
+        super().__init__(cfg)
         self.short_name = 'UF'
         self.begin_filter_parameter = cfg.usm_begin_param
         self.num_filter_parameters = 1
@@ -181,7 +169,9 @@ class UsmFilter(Filter):
         kernel_i = make_gaussian_2d_kernel(5)
         # print('kernel_i.shape', kernel_i.shape)
         # kernel_i = kernel_i.unsqueeze(0).unsqueeze(1).repeat(1, 1, 1, 1).to("cuda:0")
-        kernel_i = kernel_i.unsqueeze(0).unsqueeze(1).to("cuda:0")
+        # kernel_i = kernel_i.unsqueeze(0).unsqueeze(1).to("cuda")
+        kernel_i = kernel_i.unsqueeze(0).unsqueeze(1)
+
         pad_w = (25 - 1) // 2
         padded = F.pad(img, (pad_w, pad_w, pad_w, pad_w), mode='reflect')
         outputs = []
@@ -195,8 +185,8 @@ class UsmFilter(Filter):
 
 
 class GammaFilter(Filter):
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
+    def __init__(self,cfg):
+        super().__init__(cfg)
         self.short_name = 'G'
         self.begin_filter_parameter = cfg.gamma_begin_param
         self.num_filter_parameters = 1
@@ -211,9 +201,8 @@ class GammaFilter(Filter):
 
 
 class ImprovedWhiteBalanceFilter(Filter):
-
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
+    def __init__(self, cfg):
+        super().__init__(cfg)
         self.short_name = 'W'
         self.channels = 3
         self.begin_filter_parameter = cfg.wb_begin_param
@@ -221,7 +210,7 @@ class ImprovedWhiteBalanceFilter(Filter):
 
     def filter_param_regressor(self, features):
         log_wb_range = 0.5
-        mask = torch.tensor([[0, 1, 1]], dtype=torch.float32).to("cuda")
+        mask = torch.tensor([[0, 1, 1]], dtype=torch.float32)
         # mask = torch.tensor([[1, 0, 1]], dtype=torch.float32)
 
         # print(mask.shape)
@@ -239,37 +228,9 @@ class ImprovedWhiteBalanceFilter(Filter):
         return img * param[:, :, None, None]
 
 
-class ColorFilter(Filter):
-
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
-        self.curve_steps = cfg.curve_steps
-        self.channels = int(net.shape[3])
-        self.short_name = 'C'
-        self.begin_filter_parameter = cfg.color_begin_param
-
-        self.num_filter_parameters = self.channels * cfg.curve_steps
-
-    def filter_param_regressor(self, features):
-        color_curve = features.view(-1, self.channels, self.cfg.curve_steps)
-        color_curve = tanh_range(
-            *self.cfg.color_curve_range, initial=1)(color_curve)
-        return color_curve
-
-    def process(self, img, param):
-        color_curve = param
-        color_curve_sum = torch.sum(param, dim=4) + 1e-30
-        total_image = img * 0
-        for i in range(self.cfg.curve_steps):
-            total_image += torch.clamp(img - 1.0 * i / self.cfg.curve_steps, 0, 1.0 / self.cfg.curve_steps) \
-                           * color_curve[:, :, :, :, i]
-        total_image *= self.cfg.curve_steps / color_curve_sum
-        return total_image
-
-
 class ToneFilter(Filter):
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
+    def __init__(self,cfg):
+        super().__init__(cfg)
         self.curve_steps = cfg.curve_steps
         self.short_name = 'T'
         self.begin_filter_parameter = cfg.tone_begin_param
@@ -294,55 +255,10 @@ class ToneFilter(Filter):
         return img
 
 
-class VignetFilter(Filter):
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
-        self.short_name = 'V'
-        self.begin_filter_parameter = cfg.vignet_begin_param
-        self.num_filter_parameters = 1
-
-    def filter_param_regressor(self, features):
-        return torch.sigmoid(features)
-
-    def process(self, img, param):
-        return img * 0  # + param[:, None, None, :]
-
-    def get_num_mask_parameters(self):
-        return 5
-
-    def get_mask(self, img, mask_parameters):
-        filter_input_range = 5
-        assert mask_parameters.shape[1] == self.get_num_mask_parameters()
-        mask_parameters = tanh_range(
-            l=-filter_input_range, r=filter_input_range,
-            initial=0)(mask_parameters)
-        size = list(map(int, img.shape[1:3]))
-        grid = torch.zeros([1] + size + [2], dtype=torch.float32)
-
-        shorter_edge = min(size[0], size[1])
-        for i in range(size[0]):
-            for j in range(size[1]):
-                grid[0, i, j, 0] = (i + (shorter_edge - size[0]) / 2.0) / shorter_edge - 0.5
-                grid[0, i, j, 1] = (j + (shorter_edge - size[1]) / 2.0) / shorter_edge - 0.5
-        inp = (grid[:, :, :, 0, None] * mask_parameters[:, None, None, 0, None]) ** 2 + \
-              (grid[:, :, :, 1, None] * mask_parameters[:, None, None, 1, None]) ** 2 + \
-              mask_parameters[:, None, None, 2, None] - filter_input_range
-        inp *= self.cfg.maximum_sharpness * mask_parameters[:, None, None, 3, None] / filter_input_range
-        mask = torch.sigmoid(inp)
-        mask *= mask_parameters[:, None, None, 4, None] / filter_input_range * 0.5 + 0.5
-
-        if not self.use_masking():
-            print('* Masking Disabled')
-            mask = mask * 0 + 1
-        else:
-            print('* Masking Enabled')
-        print('mask', mask.shape)
-        return mask
-
 
 class ContrastFilter(Filter):
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
+    def __init__(self, cfg):
+        super().__init__(cfg)
         self.short_name = 'Ct'
         self.begin_filter_parameter = cfg.contrast_begin_param
         self.num_filter_parameters = 1
@@ -356,65 +272,3 @@ class ContrastFilter(Filter):
         contrast_lum = -torch.cos(math.pi * luminance) * 0.5 + 0.5
         contrast_image = img / (luminance + 1e-6) * contrast_lum
         return lerp(img, contrast_image, param[:, :, None, None])
-
-
-class WNBFilter(Filter):
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
-        self.short_name = 'BW'
-        self.begin_filter_parameter = cfg.wnb_begin_param
-        self.num_filter_parameters = 1
-
-    def filter_param_regressor(self, features):
-        return torch.sigmoid(features)
-
-    def process(self, img, param):
-        luminance = rgb2lum(img)
-        return lerp(img, luminance, param[:, :, None, None])
-
-
-class LevelFilter(Filter):
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
-        self.short_name = 'Le'
-        self.begin_filter_parameter = cfg.level_begin_param
-        self.num_filter_parameters = 2
-
-    def filter_param_regressor(self, features):
-        return torch.sigmoid(features)
-
-    def process(self, img, param):
-        lower = param[:, 0]
-        upper = param[:, 1] + 1
-        lower = lower[:, None, None, None]
-        upper = upper[:, None, None, None]
-        normalized_img = (img - lower) / (upper - lower + 1e-6)
-        normalized_img = torch.clamp(normalized_img, 0.0, 1.0)
-        return normalized_img
-
-
-class SaturationPlusFilter(Filter):
-    def __init__(self, net, cfg):
-        Filter.__init__(self, net, cfg)
-        self.short_name = 'S+'
-        self.begin_filter_parameter = cfg.saturation_begin_param
-        self.num_filter_parameters = 1
-
-    def filter_param_regressor(self, features):
-        return torch.sigmoid(features)
-
-    def process(self, img, param):
-        img = torch.minimum(img, 1.0)
-        img_np = (img.permute(0, 2, 3, 1).cpu().numpy() * 255).astype(np.uint8)  # Convert PyTorch tensor to NumPy array
-        hsv = cv.cvtColor(img_np, cv.COLOR_RGB2HSV)
-        s = hsv[:, :, :, 1:2]
-        v = hsv[:, :, :, 2:3]
-        # enhanced_s = s + (1 - s) * 0.7 * (0.5 - tf.abs(0.5 - v)) ** 2
-        enhanced_s = s + (1 - s) * (0.5 - np.abs(0.5 - v)) * 0.8
-        hsv_img_enhanced = np.stack([hsv[:, :, :, 0:1], enhanced_s, hsv[:, :, :, 2:]], axis=-1)
-        rgb_img_enhanced = cv.cvtColor(hsv_img_enhanced, cv.COLOR_HSV2RGB)
-        full_color = torch.from_numpy(rgb_img_enhanced.astype(np.float32) / 255).permute(0, 3, 1, 2)
-        param = param[:, :, None, None]
-        color_param = param
-        img_param = 1.0 - param
-        return img * img_param + full_color * color_param

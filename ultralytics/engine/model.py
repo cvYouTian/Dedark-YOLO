@@ -1,4 +1,3 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
 import sys
 from pathlib import Path
 from typing import Union

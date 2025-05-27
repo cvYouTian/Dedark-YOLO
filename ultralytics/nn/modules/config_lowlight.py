@@ -1,6 +1,7 @@
 from easydict import EasyDict as edict
-from filters_lowlight import *
+from .filters import Filter, UsmFilter, GammaFilter, ImprovedWhiteBalanceFilter, ContrastFilter, ToneFilter
 import argparse
+
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument('--exp_num', dest='exp_num', type=str, default='02', help='current experiment number')
@@ -39,10 +40,6 @@ cfg = __C
 # Filter Parameters
 ###########################################################################
 
-cfg.filters = [ImprovedWhiteBalanceFilter, GammaFilter,
-               ToneFilter, ContrastFilter, UsmFilter
-               ]
-
 # wxl：这里记录了滤波器的参数数量。
 # wxl：是通过前后参数起始位置确定的。
 cfg.num_filter_parameters = 14
@@ -77,7 +74,7 @@ cfg.clamp = False
 cfg.source_img_size = 64
 cfg.base_channels = 32
 cfg.dropout_keep_prob = 0.5
-# G and C use the same feed dict?
+# G and C use the same feed dict
 cfg.share_feed_dict = True
 cfg.shared_feature_extractor = True
 cfg.fc1_size = 128
@@ -131,3 +128,12 @@ __C.TEST.WEIGHT_FILE = args.WEIGHT_FILE
 __C.TEST.SHOW_LABEL = True
 __C.TEST.SCORE_THRESHOLD = 0.3
 __C.TEST.IOU_THRESHOLD = 0.45
+
+
+WB = ImprovedWhiteBalanceFilter(cfg)
+GF = GammaFilter(cfg)
+TF = ToneFilter(cfg)
+CF = ContrastFilter(cfg)
+S = UsmFilter(cfg)
+
+cfg.filters = [WB, GF, TF, CF, S]

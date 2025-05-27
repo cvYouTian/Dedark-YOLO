@@ -3,7 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 import torch
 import torch.nn as nn
-from ultralytics.nn.modules import (AIFI, C1, C2, C3, C3TR, SPP, SPPF, Bottleneck, BottleneckCSP, C2f, C3Ghost, C3x,
+from ultralytics.nn.modules import (lowlight_recovery, AIFI, C1, C2, C3, C3TR, SPP, SPPF, Bottleneck, BottleneckCSP, C2f, C3Ghost, C3x,
                                     Classify, Concat, Conv, Conv2, ConvTranspose, Detect, DWConv, DWConvTranspose2d,
                                     Focus, GhostBottleneck, GhostConv, HGBlock, HGStem, Pose, RepC3, RepConv,
                                     RTDETRDecoder, Segment, PConv, FasterC2f_N, FasterC2f, PconvBottleneck,
@@ -745,7 +745,7 @@ def parse_model(d, ch, verbose=True):
             # 插入模块的重复次数
             if m in (BottleneckCSP, C1, C2, C2f, C3, C3TR, C3Ghost, C3x, RepC3, FasterC2f_N, FasterC2f, SCC2f,
                      SC_PW_C2f, SC_Conv3_C2f, Conv3_SC_C2f):
-
+                # 将参数中的第二个位置的参数重复n次
                 args.insert(2, n)  # number of repeats
                 n = 1
 
@@ -759,8 +759,11 @@ def parse_model(d, ch, verbose=True):
                 n = 1
         elif m is nn.BatchNorm2d:
             args = [ch[f]]
+        # 这里涉及到参数调制
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
+        elif m is lowlight_recovery:
+            c2 = args[0]
         elif m is MFRU:
             c2 = 256
         elif m in (AsffDoubLevel, AsffTribeLevel):

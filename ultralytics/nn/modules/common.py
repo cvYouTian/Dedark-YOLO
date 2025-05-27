@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from core.util_filters import *
+
+
+__all__ = ("ExtractParameters", "ExtractParameters2")
+
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, downsample=False, bn=True, activate=True):
@@ -18,6 +21,7 @@ class ConvBlock(nn.Module):
 
     def forward(self, x):
         return self.conv_block(x)
+
 
 class ExtractParameters(nn.Module):
     def __init__(self, cfg):
@@ -43,6 +47,7 @@ class ExtractParameters(nn.Module):
         features = F.leaky_relu(self.fc1(net), 0.1)
         filter_features = self.fc2(features)
         return filter_features
+
 
 class ExtractParameters2(nn.Module):
     def __init__(self, cfg):
