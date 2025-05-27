@@ -3,7 +3,6 @@ import sys
 import os
 import xml.etree.ElementTree as ET
 import torch
-from ultralytics.nn.modules import Detect, Segment, AsffDetect
 from ultralytics.utils.downloads import download
 from pathlib import Path
 from typing import Union
@@ -33,16 +32,6 @@ def train():
 def train_lowght():
     # Load a model
     model = YOLO('yolov8n.yaml')
-    # model = RTDETR('rtdetr-l.yaml')
-    # print(model)
-    # model = YOLO('yolov8m.pt')
-
-    # 做预训练
-    # model = YOLO('yolov8x.pt')
-    # model = YOLO('yolov8n.yaml').load('yolov8n.pt')
-
-    # Train the model
-    # model.train(data="HSTS6.yaml", epochs=150, imgsz=640)
     model.train(data="coco128.yaml", epochs=5, imgsz=640)
 
 
@@ -142,47 +131,6 @@ def test_folders(model_path: str = "/home/youtian/Documents/pro/pyCode/easy_YOLO
     print("test time : %f" % (timer / len(list(src.iterdir()))))
 
 
-def tracker():
-    pa = "/home/you/Downloads/l.mp4"
-    cap = cv2.VideoCapture(pa)
-    size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),)
-    # cap = cv2.VideoCapture("/home/you/Desktop/YOLOv8/easy_YOLOv8//sample.mp4")
-    model = YOLO("/home/you/Desktop/YOLOv8/easy_YOLOv8/runs/detect/train3"
-                 "/weights/best.pt")
-    flag = 0
-    out = cv2.VideoWriter('airplaneSort.mp4', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 40, size)
-    while True:
-        if flag < 1:
-            flag += 1
-            continue
-        else:
-            flag += 1
-            ret, frame = cap.read()
-            if not ret:
-                break
-            results = model.track(frame, persist=True)
-            boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
-            # result.boxes.id.cpu().numpy().astype(int)
-            try:
-                ids = results[0].boxes.id.cpu().numpy().astype(int)
-                for box, id in zip(boxes, ids):
-                    cv2.rectangle(frame, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
-                    cv2.putText(
-                        frame,
-                        f"Id {id}",
-                        (box[0], box[1]),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        1,
-                        (0, 0, 255),
-                        2,
-                    )
-            except Exception as e:
-                print(e)
-            cv2.imshow("frame", frame)
-            out.write(frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-
 
 class VOCprocess:
     def __init__(self):
@@ -244,23 +192,6 @@ class VOCprocess:
                 self.convert_label(self.path, lb_path, year, id)  # convert labels to YOLO format
 
 
-def videopin():
-    from moviepy.editor import VideoFileClip, clips_array
-
-    clip1 = VideoFileClip('our.mp4')  # 读入视频
-    clip2 = VideoFileClip('our1.mp4')
-    # final_clip = clips_array([[clip1], [clip2]])  # 上下拼接
-    final_clip = clips_array([[clip1, clip2]])#左右拼接
-
-    final_clip.write_videofile('c.mp4')  # 保存视频
-
-
-def check_GPU():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    return device
-
-
 def Para4pt(model):
     # 一定要找到权重中的model，才可以后续进行parameter的计算
     # YOLOv8
@@ -279,21 +210,21 @@ def FLOPs_Para4pt():
     根据pytorch的pt文件来计算模型的FLOPs和参数量，use thop
     Args:
         model:pytorch加载好的模型文件
-
     Returns:None
     """
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     pa = Path("/home/youtian/Documents/pro/pyCode/ultralytics-YOLOv8/yolov8l.pt")
     model = torch.load(str(pa).strip())
 
     # 先将模型的调整为half()格式，再将其贴到GPU
-    model = model.get("model").half().to(check_GPU())
+    model = model.get("model").half().to(device)
 
     # 假设模型期望的输入是3个通道的图像
     input_tensor = torch.randn(1, 3, 640, 640)
 
     # 同理，将数据转化成半精度之后再加载到GPU
-    input_tensor = input_tensor.half().to(check_GPU())
+    input_tensor = input_tensor.half().to(device)
 
     # 调用profile函数计算FLOPs和参数量
     macs, params = profile(model, inputs=(input_tensor,))
@@ -320,16 +251,4 @@ def predict():
 
 
 if __name__ == "__main__":
-    # Para4pt(model)
-    # FLOPs_Para4pt()
-
-    # loss_compara_pic("./loss_csv")
-    # calc_instance()
-    # train()
     train_lowght()
-    # test_video()
-    # test_folders()
-    # test_img()
-    # tracker()
-    # onnx()
-    # predict()

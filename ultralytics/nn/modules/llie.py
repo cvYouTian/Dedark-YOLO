@@ -6,6 +6,8 @@ import numpy as np
 from .config_lowlight import cfg
 from .common import ExtractParameters2
 
+__all__ = ("lowlight_recovery")
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class lowlight_recovery(nn.Module):
@@ -13,6 +15,7 @@ class lowlight_recovery(nn.Module):
         super().__init__()
         # 确保extractor在GPU上
         self.extractor = ExtractParameters2(cfg)
+        self.recovery_loss = torch.empty(0)
 
         # 确保所有filter都在GPU上
         self.filters = nn.ModuleList([f for f in cfg.filters])
@@ -44,7 +47,6 @@ class lowlight_recovery(nn.Module):
 
 
         else:
-
             input_data_clean = x  # 保留原始数据
 
             # 使用PyTorch操作替代NumPy（保持自动微分）
@@ -63,6 +65,6 @@ class lowlight_recovery(nn.Module):
                 filtered_image_batch, param = filter(filtered_image_batch, filter_features)
                 filter_parameters.append(param)
 
-        recovery_loss = F.mse_loss(filtered_image_batch, input_data_clean)
+        self.recovery_loss = torch.sum((filtered_image_batch - input_data_clean) ** 2)
 
         return filtered_image_batch

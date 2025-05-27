@@ -39,6 +39,9 @@ class DetectionTrainer(BaseTrainer):
     def preprocess_batch(self, batch):
         """Preprocesses a batch of images by scaling and converting to float."""
         batch['img'] = batch['img'].to(self.device, non_blocking=True).float() / 255
+
+
+        # 这里是现低光照
         return batch
 
     def set_model_attributes(self):

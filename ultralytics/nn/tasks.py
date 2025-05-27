@@ -729,7 +729,7 @@ def parse_model(d, ch, verbose=True):
         n = n_ = max(round(n * depth), 1) if n > 1 else n  # depth gain
         # add FasterC2f 、PconvBottleneck and PConv ...
         # 判断moudule，注意这里的函数是只承接上一层的，即f==-1
-        if m in (Classify, Conv, ConvTranspose, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, Focus,
+        if m in ( Classify, Conv, ConvTranspose, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, Focus,
                  BottleneckCSP, C1, C2, C2f, C3, C3TR, C3Ghost, nn.ConvTranspose2d, DWConvTranspose2d, C3x, RepC3,
                  FasterC2f_N, FasterC2f, PconvBottleneck, PconvBottleneck_n, PConv, SCConv, SCConvBottleneck, SCC2f,
                  SC_PW_Bottleneck, SC_PW_C2f, SC_Conv3_Bottleneck, SC_Conv3_C2f, Conv3_SC_C2f, Conv3_SC_Bottleneck):
