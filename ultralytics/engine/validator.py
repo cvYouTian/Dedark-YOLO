@@ -96,11 +96,13 @@ class BaseValidator:
         """
         self.training = trainer is not None
         augment = self.args.augment and (not self.training)
+        # 如果是训练中使用的验证函数
         if self.training:
             self.device = trainer.device
             self.data = trainer.data
             model = trainer.ema.ema or trainer.model
-            self.args.half = self.device.type != 'cpu'  # force FP16 val during training
+            # self.args.half = self.device.type != 'cpu'  # force FP16 val during training
+            self.args.half = False
             model = model.half() if self.args.half else model.float()
             self.model = model
             self.loss = torch.zeros_like(trainer.loss_items, device=trainer.device)
@@ -118,6 +120,7 @@ class BaseValidator:
             self.model = model
             self.device = model.device  # update device
             self.args.half = model.fp16  # update half
+
             stride, pt, jit, engine = model.stride, model.pt, model.jit, model.engine
             imgsz = check_imgsz(self.args.imgsz, stride=stride)
             if engine:
@@ -152,11 +155,13 @@ class BaseValidator:
         bar = tqdm(self.dataloader, desc, n_batches, bar_format=TQDM_BAR_FORMAT)
         self.init_metrics(de_parallel(model))
         self.jdict = []  # empty before each val
+        # 在验证集上的进行训练
         for batch_i, batch in enumerate(bar):
             self.run_callbacks('on_val_batch_start')
             self.batch_i = batch_i
             # Preprocess
             with dt[0]:
+                # 图像预处理
                 batch = self.preprocess(batch)
 
             # Inference

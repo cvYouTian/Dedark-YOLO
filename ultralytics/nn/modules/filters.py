@@ -170,13 +170,13 @@ class UsmFilter(Filter):
         # print('kernel_i.shape', kernel_i.shape)
         # kernel_i = kernel_i.unsqueeze(0).unsqueeze(1).repeat(1, 1, 1, 1).to("cuda:0")
         # kernel_i = kernel_i.unsqueeze(0).unsqueeze(1).to("cuda")
-        kernel_i = kernel_i.unsqueeze(0).unsqueeze(1)
+        kernel_i = kernel_i.unsqueeze(0).unsqueeze(1).to(img.device)
 
         pad_w = (25 - 1) // 2
         padded = F.pad(img, (pad_w, pad_w, pad_w, pad_w), mode='reflect')
         outputs = []
         for channel_idx in range(3):
-            data_c = padded[:, channel_idx:(channel_idx + 1), :, :]
+            data_c = padded[:, channel_idx:(channel_idx + 1), :, :].to(img.device)
             data_c = F.conv2d(data_c, kernel_i, stride=1)
             outputs.append(data_c)
         output = torch.cat(outputs, dim=1)
@@ -210,7 +210,7 @@ class ImprovedWhiteBalanceFilter(Filter):
 
     def filter_param_regressor(self, features):
         log_wb_range = 0.5
-        mask = torch.tensor([[0, 1, 1]], dtype=torch.float32)
+        mask = torch.tensor([[0, 1, 1]], dtype=torch.float32).to(features.device)
         # mask = torch.tensor([[1, 0, 1]], dtype=torch.float32)
 
         # print(mask.shape)

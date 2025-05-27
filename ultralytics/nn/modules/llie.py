@@ -23,10 +23,28 @@ class lowlight_recovery(nn.Module):
         # self.to(device)  # 这是关键修复
     def forward(self, x):
         if x.device == "cuda":
+            input_data_clean = x
+            device = x.device
+            self.to(device)
+
+            input_data = torch.pow(x, self.lowlight_param).to(device)
+            filtered_image_batch = input_data.clone()
+
+            # 插值操作
+            input_data = F.interpolate(input_data, size=(256, 256), mode='bilinear').to(device)
+
+            # 特征提取
+            filter_features = self.extractor(input_data)
+
+            # 应用过滤器（确保所有输入输出在相同设备）
+            filter_parameters = []
+            for filter in self.filters:
+                filtered_image_batch, param = filter(filtered_image_batch, filter_features)
+                filter_parameters.append(param)
+
 
         else:
-            # 确保输入在模型设备上
-            # x = x.to(device)
+
             input_data_clean = x  # 保留原始数据
 
             # 使用PyTorch操作替代NumPy（保持自动微分）
@@ -45,7 +63,6 @@ class lowlight_recovery(nn.Module):
                 filtered_image_batch, param = filter(filtered_image_batch, filter_features)
                 filter_parameters.append(param)
 
-            # 计算损失（显式设备同步）
-            recovery_loss = F.mse_loss(filtered_image_batch, input_data_clean)
+        recovery_loss = F.mse_loss(filtered_image_batch, input_data_clean)
 
         return filtered_image_batch

@@ -30,6 +30,22 @@ def train():
     model.train(data="coco128.yaml", epochs=5, imgsz=640)
 
 
+def train_lowght():
+    # Load a model
+    model = YOLO('yolov8n.yaml')
+    # model = RTDETR('rtdetr-l.yaml')
+    # print(model)
+    # model = YOLO('yolov8m.pt')
+
+    # 做预训练
+    # model = YOLO('yolov8x.pt')
+    # model = YOLO('yolov8n.yaml').load('yolov8n.pt')
+
+    # Train the model
+    # model.train(data="HSTS6.yaml", epochs=150, imgsz=640)
+    model.train(data="coco128.yaml", epochs=5, imgsz=640)
+
+
 def onnx(path: Union[str, Path] = "/home/youtian/Documents/pro/pyCode/easy_YOLOv8/yolov8l.pt"):
     # you need numpy==1.24.3 ,otherwise it will report Error
     onnxpath = Path(path).with_suffix(".onnx")
@@ -309,7 +325,8 @@ if __name__ == "__main__":
 
     # loss_compara_pic("./loss_csv")
     # calc_instance()
-    train()
+    # train()
+    train_lowght()
     # test_video()
     # test_folders()
     # test_img()
