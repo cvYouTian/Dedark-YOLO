@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import random
-import numpy as np
 from .config_lowlight import cfg
 from .common import ExtractParameters2
 
@@ -15,7 +14,6 @@ class lowlight_recovery(nn.Module):
         super().__init__()
         # 确保extractor在GPU上
         self.extractor = ExtractParameters2(cfg)
-        self.recovery_loss = torch.empty(0)
 
         # 确保所有filter都在GPU上
         self.filters = nn.ModuleList([f for f in cfg.filters])
@@ -65,6 +63,6 @@ class lowlight_recovery(nn.Module):
                 filtered_image_batch, param = filter(filtered_image_batch, filter_features)
                 filter_parameters.append(param)
 
-        self.recovery_loss = torch.sum((filtered_image_batch - input_data_clean) ** 2)
+        recovery_loss = torch.sum((filtered_image_batch - input_data_clean) ** 2)
 
         return filtered_image_batch

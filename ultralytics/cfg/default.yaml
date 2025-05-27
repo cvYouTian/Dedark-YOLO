@@ -29,7 +29,7 @@ rect: False  # (bool) rectangular training if mode='train' or rectangular valida
 cos_lr: False  # (bool) use cosine learning rate scheduler
 close_mosaic: 0  # (int) disable mosaic augmentation for final epochs
 resume: False  # (bool) resume training from last checkpoint
-amp: True  # (bool) Automatic Mixed Precision (AMP) training, choices=[True, False], True runs AMP check
+amp: False  # (bool) Automatic Mixed Precision (AMP) training, choices=[True, False], True runs AMP check
 fraction: 1.0  # (float) dataset fraction to train on (default is 1.0, all images in train set)
 profile: False  # (bool) profile ONNX and TensorRT speeds during training for loggers
 # Segmentation
@@ -90,6 +90,7 @@ warmup_bias_lr: 0.1  # (float) warmup initial bias lr
 box: 7.5  # (float) box loss gain
 cls: 0.5  # (float) cls loss gain (scale with pixels)
 dfl: 1.5  # (float) dfl loss gain
+ler: 3.0  # (float) llie recovery loss
 
 pose: 12.0  # (float) pose loss gain
 kobj: 1.0  # (float) keypoint obj loss gain

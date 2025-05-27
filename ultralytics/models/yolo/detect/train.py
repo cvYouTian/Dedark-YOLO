@@ -8,9 +8,71 @@ from ultralytics.nn.tasks import DetectionModel
 from ultralytics.utils import DEFAULT_CFG, LOGGER, RANK
 from ultralytics.utils.plotting import plot_images, plot_labels, plot_results
 from ultralytics.utils.torch_utils import de_parallel, torch_distributed_zero_first
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import random
+from ultralytics.nn.modules.config_lowlight import cfg
+from ultralytics.nn.modules.common import ExtractParameters2
 
 
-# BaseTrainer python usage
+class lowlight_recovery(nn.Module):
+    def __init__(self, input=3, output=3, lowlight_param=1):
+        super().__init__()
+        # 确保extractor在GPU上
+        self.extractor = ExtractParameters2(cfg)
+
+        # 确保所有filter都在GPU上
+        self.filters = nn.ModuleList([f for f in cfg.filters])
+
+        self.lowlight_param = lowlight_param if lowlight_param == 1 else random.uniform(1.5, 5)
+
+    def forward(self, x):
+        if x.device == "cuda":
+            input_data_clean = x
+            device = x.device
+            self.to(device)
+
+            input_data = torch.pow(x, self.lowlight_param).to(device)
+            filtered_image_batch = input_data.clone()
+
+            # 插值操作
+            input_data = F.interpolate(input_data, size=(256, 256), mode='bilinear').to(device)
+
+            # 特征提取
+            filter_features = self.extractor(input_data)
+
+            # 应用过滤器（确保所有输入输出在相同设备）
+            filter_parameters = []
+            for filter in self.filters:
+                filtered_image_batch, param = filter(filtered_image_batch, filter_features)
+                filter_parameters.append(param)
+
+
+        else:
+            input_data_clean = x  # 保留原始数据
+
+            # 使用PyTorch操作替代NumPy（保持自动微分）
+            input_data = torch.pow(x, self.lowlight_param)
+            filtered_image_batch = input_data.clone()
+
+            # 插值操作
+            input_data = F.interpolate(input_data, size=(256, 256), mode='bilinear')
+
+            # 特征提取
+            filter_features = self.extractor(input_data)
+
+            # 应用过滤器（确保所有输入输出在相同设备）
+            filter_parameters = []
+            for filter in self.filters:
+                filtered_image_batch, param = filter(filtered_image_batch, filter_features)
+                filter_parameters.append(param)
+
+        recovery_loss = torch.sum((filtered_image_batch - input_data_clean) ** 2)
+
+        return filtered_image_batch, recovery_loss
+
+
 class DetectionTrainer(BaseTrainer):
     def build_dataset(self, img_path, mode='train', batch=None):
         """
@@ -23,6 +85,7 @@ class DetectionTrainer(BaseTrainer):
         """
         gs = max(int(de_parallel(self.model).stride.max() if self.model else 0), 32)
         return build_yolo_dataset(self.args, img_path, batch, self.data, mode=mode, rect=mode == 'val', stride=gs)
+
 
     def get_dataloader(self, dataset_path, batch_size=16, rank=0, mode='train'):
         """Construct and return dataloader."""
@@ -40,9 +103,11 @@ class DetectionTrainer(BaseTrainer):
         """Preprocesses a batch of images by scaling and converting to float."""
         batch['img'] = batch['img'].to(self.device, non_blocking=True).float() / 255
 
-
-        # 这里是现低光照
-        return batch
+        # # 这里是现低光照
+        low = lowlight_recovery()
+        batch["img"], recovery_loss = low(batch["img"])
+        #
+        return batch, recovery_loss
 
     def set_model_attributes(self):
         """nl = de_parallel(self.model).model[-1].nl  # number of detection layers (to scale hyps)."""
