@@ -77,6 +77,7 @@ class ExtractParameters2(nn.Module):
         filter_features = self.fc2(features)
         return filter_features
 
+
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, filter_num1, filter_num2, bn=True, activate=True):
         super(ResidualBlock, self).__init__()
@@ -90,8 +91,10 @@ class ResidualBlock(nn.Module):
         x += shortcut
         return x
 
+
 def route(previous_output, current_output):
     return torch.cat((current_output, previous_output), dim=1)
+
 
 def upsample(input_data, method="deconv"):
     assert method in ["resize", "deconv"]

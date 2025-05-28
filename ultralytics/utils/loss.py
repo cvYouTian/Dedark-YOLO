@@ -391,3 +391,28 @@ class v8ClassificationLoss:
         loss = torch.nn.functional.cross_entropy(preds, batch['cls'], reduction='sum') / 64
         loss_items = loss.detach()
         return loss, loss_items
+
+
+class RcoveryDetectionLoss(v8DetectionLoss):
+    def __init__(self, model, recovery_weight=3.0):
+        super().__init__(model)
+        self.recovery_weight = recovery_weight
+
+    def __call__(self, preds, batch):
+        # Compute standard detection loss
+        loss, loss_items = super().__call__(preds, batch)
+
+        # Add recovery loss if present
+        if 'recovery_loss' in batch:
+            # 打印日志用于检查loss是否下降
+            print(f"Recovery Loss: {batch['recovery_loss'].item():.4f}")
+            recovery_loss = batch['recovery_loss']
+            # Ensure recovery_loss is a scalar tensor
+            if recovery_loss.ndim > 0:
+                recovery_loss = recovery_loss.mean()
+            # Add weighted recovery loss to total loss
+            loss += self.recovery_weight * recovery_loss
+            # Append recovery loss to loss_items for logging
+            loss_items = torch.cat((loss_items, recovery_loss.detach().view(1)))
+
+        return loss, loss_items

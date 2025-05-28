@@ -13,7 +13,7 @@ from ultralytics.nn.modules import (lowlight_recovery, AIFI, C1, C2, C3, C3TR, S
 
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
-from ultralytics.utils.loss import v8ClassificationLoss, v8DetectionLoss, v8PoseLoss, v8SegmentationLoss
+from ultralytics.utils.loss import v8ClassificationLoss, v8PoseLoss, v8SegmentationLoss, RcoveryDetectionLoss
 from ultralytics.utils.plotting import feature_visualization
 from ultralytics.utils.torch_utils import (fuse_conv_and_bn, fuse_deconv_and_bn, initialize_weights, intersect_dicts,
                                            make_divisible, model_info, scale_img, time_sync)
@@ -66,7 +66,7 @@ class BaseModel(nn.Module):
 
     def _predict_once(self, x, profile=False, visualize=False):
         """
-        Perform a forward pass through the network.
+        Perform a forward pass through the network.使用的这个函数可以打印每一层的耗时
 
         Args:
             x (torch.Tensor): The input tensor to the model.
@@ -84,7 +84,10 @@ class BaseModel(nn.Module):
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
             if profile:
                 self._profile_one_layer(m, x, dt)
-            x = m(x)   # run
+            if isinstance(m,lowlight_recovery):
+                x, rloss = m(x)
+            else:
+                x = m(x)   # run
             # 判断是不是P特征
             y.append(x if m.i in self.save else None)  # save output
             if visualize:
@@ -244,7 +247,7 @@ class DetectionModel(BaseModel):
             self.yaml['nc'] = nc
         # model, savelist
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)
-        # name = {0:'0', 1:'1',...}
+        # name = {0:'0', 1:'1',...
         self.names = {i: f'{i}' for i in range(self.yaml['nc'])}  # default names dict
         # 添加一个新的键值对{inplace:True}
         self.inplace = self.yaml.get('inplace', True)
@@ -254,7 +257,7 @@ class DetectionModel(BaseModel):
         if isinstance(m, (Detect, Segment, Pose, AsffDetect)):
             s = 256  # 2x min stride
             m.inplace = self.inplace
-            # 这里根据m的类型调用父类的forward(x)
+            # 这里根据m的类型调用父类basemodel的forward(x)
             forward = lambda x: self.forward(x)[0] if isinstance(m, (Segment, Pose)) else self.forward(x)
             # 使用全零的数组测试一下
             tes = forward(torch.zeros(1, ch, s, s))
@@ -310,7 +313,7 @@ class DetectionModel(BaseModel):
 
     # 重写了BaseModel的init_criterion()
     def init_criterion(self):
-        return v8DetectionLoss(self)
+        return RcoveryDetectionLoss(self)
 
 
 class SegmentationModel(DetectionModel):
@@ -393,6 +396,7 @@ class ClassificationModel(BaseModel):
             self.yaml['nc'] = nc  # override yaml value
         elif not nc and not self.yaml.get('nc', None):
             raise ValueError('nc not specified. Must specify nc in model.yaml or function arguments.')
+
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)  # model, savelist
         self.stride = torch.Tensor([1])  # no stride constraints
         self.names = {i: f'{i}' for i in range(self.yaml['nc'])}  # default names dict
@@ -685,7 +689,6 @@ def parse_model(d, ch, verbose=True):
     # 使用.get的方法拿到字典的值, 如果key不存在, 则不会报错,会用NONE来填充Value
     nc, act, scales = (d.get(x) for x in ('nc', 'activation', 'scales'))
     # 添加depth, width, kpt_shape为1.0
-
     depth, width, kpt_shape = (d.get(x, 1.0) for x in ('depth_multiple', 'width_multiple', 'kpt_shape'))
     # 根据n、l、m、s等选参数
     if scales:
@@ -729,7 +732,7 @@ def parse_model(d, ch, verbose=True):
         n = n_ = max(round(n * depth), 1) if n > 1 else n  # depth gain
         # add FasterC2f 、PconvBottleneck and PConv ...
         # 判断moudule，注意这里的函数是只承接上一层的，即f==-1
-        if m in ( Classify, Conv, ConvTranspose, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, Focus,
+        if m in (Classify, Conv, ConvTranspose, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, Focus,
                  BottleneckCSP, C1, C2, C2f, C3, C3TR, C3Ghost, nn.ConvTranspose2d, DWConvTranspose2d, C3x, RepC3,
                  FasterC2f_N, FasterC2f, PconvBottleneck, PconvBottleneck_n, PConv, SCConv, SCConvBottleneck, SCC2f,
                  SC_PW_Bottleneck, SC_PW_C2f, SC_Conv3_Bottleneck, SC_Conv3_C2f, Conv3_SC_C2f, Conv3_SC_Bottleneck):
@@ -781,7 +784,9 @@ def parse_model(d, ch, verbose=True):
             c2 = ch[f]
         # 如果module的repeats大于1, 需要将module进行封装起来
         # 注意这里args可能是多个值
-        m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)  # module
+        # 注意m_只是实例,不是调用
+        m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
+
         t = str(m)[8:-2].replace('__main__.', '')  # module type
         m.np = sum(x.numel() for x in m_.parameters())  # number params
         m_.i, m_.f, m_.type = i, f, t  # attach index, 'from' index, type

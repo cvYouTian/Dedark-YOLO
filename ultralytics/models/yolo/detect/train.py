@@ -8,69 +8,75 @@ from ultralytics.nn.tasks import DetectionModel
 from ultralytics.utils import DEFAULT_CFG, LOGGER, RANK
 from ultralytics.utils.plotting import plot_images, plot_labels, plot_results
 from ultralytics.utils.torch_utils import de_parallel, torch_distributed_zero_first
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import random
 from ultralytics.nn.modules.config_lowlight import cfg
 from ultralytics.nn.modules.common import ExtractParameters2
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 
-class lowlight_recovery(nn.Module):
-    def __init__(self, input=3, output=3, lowlight_param=1):
+class LowLightRecovery(nn.Module):
+    def __init__(self, input_channels=3, output_channels=3, lowlight_param=1.0, cfg=None):
+        """
+        Initialize the LowLightRecovery module for low-light image enhancement.
+
+        Args:
+            input_channels (int): Number of input channels (default: 3 for RGB).
+            output_channels (int): Number of output channels (default: 3 for RGB).
+            lowlight_param (float): Parameter for low-light simulation (default: 1.0).
+            cfg (object): Configuration object containing extractor and filters.
+        """
         super().__init__()
-        # 确保extractor在GPU上
+        # Initialize feature extractor and filters
         self.extractor = ExtractParameters2(cfg)
+        self.filters = nn.ModuleList(cfg.filters)
+        self.lowlight_param = float(lowlight_param)  # Ensure float for consistency
 
-        # 确保所有filter都在GPU上
-        self.filters = nn.ModuleList([f for f in cfg.filters])
-
-        self.lowlight_param = lowlight_param if lowlight_param == 1 else random.uniform(1.5, 5)
+        # Validate input/output channels (optional, can be removed if not needed)
+        if not isinstance(self.extractor, nn.Module) or not all(isinstance(f, nn.Module) for f in self.filters):
+            raise ValueError("extractor and filters must be nn.Module instances")
 
     def forward(self, x):
-        if x.device == "cuda":
-            input_data_clean = x
-            device = x.device
-            self.to(device)
+        """
+        Forward pass for low-light image enhancement.
 
-            input_data = torch.pow(x, self.lowlight_param).to(device)
-            filtered_image_batch = input_data.clone()
+        Args:
+            x (torch.Tensor): Input image tensor of shape (batch, channels, height, width).
 
-            # 插值操作
-            input_data = F.interpolate(input_data, size=(256, 256), mode='bilinear').to(device)
+        Returns:
+            tuple: (enhanced_image, recovery_loss)
+                - enhanced_image (torch.Tensor): Enhanced image tensor.
+                - recovery_loss (torch.Tensor): Mean squared error between enhanced and original images.
+        """
+        # Ensure module is on the same device as input
+        device = x.device
+        self.to(device)
 
-            # 特征提取
-            filter_features = self.extractor(input_data)
+        # Store original image for loss computation
+        input_data_clean = x
 
-            # 应用过滤器（确保所有输入输出在相同设备）
-            filter_parameters = []
-            for filter in self.filters:
-                filtered_image_batch, param = filter(filtered_image_batch, filter_features)
-                filter_parameters.append(param)
+        # Simulate low-light condition
+        input_data = torch.pow(x, self.lowlight_param)
 
+        # Clone for filtered output
+        filtered_image_batch = input_data.clone()
 
-        else:
-            input_data_clean = x  # 保留原始数据
+        # Resize input for feature extraction
+        input_data = F.interpolate(input_data, size=(256, 256), mode='bilinear')
 
-            # 使用PyTorch操作替代NumPy（保持自动微分）
-            input_data = torch.pow(x, self.lowlight_param)
-            filtered_image_batch = input_data.clone()
+        # Extract features
+        filter_features = self.extractor(input_data)
 
-            # 插值操作
-            input_data = F.interpolate(input_data, size=(256, 256), mode='bilinear')
+        # Apply filters sequentially
+        for filter_module in self.filters:
+            filtered_image_batch, _ = filter_module(filtered_image_batch, filter_features)
 
-            # 特征提取
-            filter_features = self.extractor(input_data)
-
-            # 应用过滤器（确保所有输入输出在相同设备）
-            filter_parameters = []
-            for filter in self.filters:
-                filtered_image_batch, param = filter(filtered_image_batch, filter_features)
-                filter_parameters.append(param)
-
-        recovery_loss = torch.sum((filtered_image_batch - input_data_clean) ** 2)
+        # Compute recovery loss (mean squared error)
+        recovery_loss = F.mse_loss(filtered_image_batch, input_data_clean)
 
         return filtered_image_batch, recovery_loss
+
 
 
 class DetectionTrainer(BaseTrainer):
@@ -85,7 +91,6 @@ class DetectionTrainer(BaseTrainer):
         """
         gs = max(int(de_parallel(self.model).stride.max() if self.model else 0), 32)
         return build_yolo_dataset(self.args, img_path, batch, self.data, mode=mode, rect=mode == 'val', stride=gs)
-
 
     def get_dataloader(self, dataset_path, batch_size=16, rank=0, mode='train'):
         """Construct and return dataloader."""
@@ -104,10 +109,11 @@ class DetectionTrainer(BaseTrainer):
         batch['img'] = batch['img'].to(self.device, non_blocking=True).float() / 255
 
         # # 这里是现低光照
-        low = lowlight_recovery()
+        low = LowLightRecovery(cfg=cfg)
         batch["img"], recovery_loss = low(batch["img"])
-        #
-        return batch, recovery_loss
+        batch["recovery_loss"] = recovery_loss
+
+        return batch
 
     def set_model_attributes(self):
         """nl = de_parallel(self.model).model[-1].nl  # number of detection layers (to scale hyps)."""

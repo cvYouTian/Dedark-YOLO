@@ -1,10 +1,3 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
-"""
-Train a model on a dataset
-
-Usage:
-    $ yolo mode=train model=yolov8n.pt data=coco128.yaml imgsz=640 epochs=100 batch=16
-"""
 import math
 import os
 import subprocess

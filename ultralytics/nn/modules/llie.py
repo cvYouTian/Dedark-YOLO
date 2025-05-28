@@ -9,6 +9,7 @@ __all__ = ("lowlight_recovery")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
+
 class lowlight_recovery(nn.Module):
     def __init__(self, input=3, output=3, lowlight_param=1):
         super().__init__()
@@ -43,7 +44,6 @@ class lowlight_recovery(nn.Module):
                 filtered_image_batch, param = filter(filtered_image_batch, filter_features)
                 filter_parameters.append(param)
 
-
         else:
             input_data_clean = x  # 保留原始数据
 
@@ -65,4 +65,4 @@ class lowlight_recovery(nn.Module):
 
         recovery_loss = torch.sum((filtered_image_batch - input_data_clean) ** 2)
 
-        return filtered_image_batch
+        return filtered_image_batch, recovery_loss
