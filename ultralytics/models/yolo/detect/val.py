@@ -2,10 +2,8 @@
 
 import os
 from pathlib import Path
-
 import numpy as np
 import torch
-
 from ultralytics.data import build_dataloader, build_yolo_dataset
 from ultralytics.engine.validator import BaseValidator
 from ultralytics.utils import DEFAULT_CFG, LOGGER, ops
@@ -13,6 +11,11 @@ from ultralytics.utils.checks import check_requirements
 from ultralytics.utils.metrics import ConfusionMatrix, DetMetrics, box_iou
 from ultralytics.utils.plotting import output_to_target, plot_images
 from ultralytics.utils.torch_utils import de_parallel
+import random
+from ultralytics.nn.modules.config_lowlight import cfg
+from ultralytics.nn.modules.common import ExtractParameters2
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 class DetectionValidator(BaseValidator):
@@ -31,6 +34,7 @@ class DetectionValidator(BaseValidator):
         """Preprocesses batch of images for YOLO training."""
         batch['img'] = batch['img'].to(self.device, non_blocking=True)
         batch['img'] = (batch['img'].half() if self.args.half else batch['img'].float()) / 255
+
         for k in ['batch_idx', 'cls', 'bboxes']:
             batch[k] = batch[k].to(self.device)
 
@@ -260,10 +264,8 @@ class DetectionValidator(BaseValidator):
 
 def val(cfg=DEFAULT_CFG, use_python=False):
     """Validate trained YOLO model on validation dataset."""
-    # model = cfg.model or 'yolov8n.pt'
-    model = cfg.model or "/home/youtian/Documents/pro/pyCode/easy_YOLOv8/runs/detect/RFB+ASFF/weights/best.pt"
-    # data = cfg.data or 'coco128.yaml'
-    data = cfg.data or "/home/youtian/Documents/pro/pyCode/easy_YOLOv8/ultralytics/cfg/datasets/HSTS6.yaml"
+    model = cfg.model or "yolov8n.pt"
+    data = cfg.data or "coco128.yaml"
 
     args = dict(model=model, data=data)
     if use_python:

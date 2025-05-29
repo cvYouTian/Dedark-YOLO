@@ -50,7 +50,6 @@ def onnx(path: Union[str, Path] = "/home/youtian/Documents/pro/pyCode/easy_YOLOv
 
 
 def test_img():
-    # print(torch.load("/home/youtian/Documents/pro/pyCode/easy_YOLOv8/runs/detect/RFB+ASFF/weights/best.pt"))
     model = YOLO("/home/youtian/Documents/pro/pyCode/easy_YOLOv8/runs/detect/RFB+ASFF/weights/best.pt")
     img = cv2.imread("/home/youtian/Documents/pro/pyCode/easy_YOLOv8/images/16182.jpg")
     res = model(img)

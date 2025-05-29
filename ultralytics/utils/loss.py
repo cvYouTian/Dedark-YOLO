@@ -1,16 +1,11 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from ultralytics.utils.metrics import OKS_SIGMA
 from ultralytics.utils.ops import crop_mask, xywh2xyxy, xyxy2xywh
 from ultralytics.utils.tal import TaskAlignedAssigner, dist2bbox, make_anchors
-
 from .metrics import bbox_iou
 from .tal import bbox2dist
-
 
 
 class VarifocalLoss(nn.Module):
@@ -106,7 +101,7 @@ class KeypointLoss(nn.Module):
 
 # Criterion class for computing Detection training losses
 class v8DetectionLoss:
-    def __init__(self, model):  # model must be de-paralleled
+    def __init__(self, model):
         # return cpu/gpu
         device = next(model.parameters()).device  # get model device
         h = model.args  # hyperparameters
@@ -148,8 +143,6 @@ class v8DetectionLoss:
         if self.use_dfl:
             b, a, c = pred_dist.shape  # batch, anchors, channels
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
-            # pred_dist = pred_dist.view(b, a, c // 4, 4).transpose(2,3).softmax(3).matmul(self.proj.type(pred_dist.dtype))
-            # pred_dist = (pred_dist.view(b, a, c // 4, 4).softmax(2) * self.proj.type(pred_dist.dtype).view(1, 1, -1, 1)).sum(2)
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
     def __call__(self, preds, batch):
@@ -197,7 +190,7 @@ class v8DetectionLoss:
         loss[1] *= self.hyp.cls  # cls gain
         loss[2] *= self.hyp.dfl  # dfl gain
 
-        return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
+        return loss.sum() * batch_size, loss.detach()
 
 
 # Criterion class for computing training losses
@@ -394,7 +387,7 @@ class v8ClassificationLoss:
 
 
 class RcoveryDetectionLoss(v8DetectionLoss):
-    def __init__(self, model, recovery_weight=3.0):
+    def __init__(self, model, recovery_weight=2.0):
         super().__init__(model)
         self.recovery_weight = recovery_weight
 

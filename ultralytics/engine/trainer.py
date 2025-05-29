@@ -5,7 +5,6 @@ import time
 from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
-
 import numpy as np
 import torch
 from torch import distributed as dist
@@ -13,7 +12,6 @@ from torch import nn, optim
 from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
-
 from ultralytics.cfg import get_cfg
 from ultralytics.data.utils import check_cls_dataset, check_det_dataset
 from ultralytics.nn.tasks import attempt_load_one_weight, attempt_load_weights
@@ -25,6 +23,7 @@ from ultralytics.utils.dist import ddp_cleanup, generate_ddp_command
 from ultralytics.utils.files import get_latest_run, increment_path
 from ultralytics.utils.torch_utils import (EarlyStopping, ModelEMA, de_parallel, init_seeds, one_cycle, select_device,
                                            strip_optimizer)
+
 
 
 class BaseTrainer:

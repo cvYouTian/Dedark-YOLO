@@ -3,6 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 import torch
 import torch.nn as nn
+
 from ultralytics.nn.modules import (lowlight_recovery, AIFI, C1, C2, C3, C3TR, SPP, SPPF, Bottleneck, BottleneckCSP, C2f, C3Ghost, C3x,
                                     Classify, Concat, Conv, Conv2, ConvTranspose, Detect, DWConv, DWConvTranspose2d,
                                     Focus, GhostBottleneck, GhostConv, HGBlock, HGStem, Pose, RepC3, RepConv,
@@ -13,7 +14,7 @@ from ultralytics.nn.modules import (lowlight_recovery, AIFI, C1, C2, C3, C3TR, S
 
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
-from ultralytics.utils.loss import v8ClassificationLoss, v8PoseLoss, v8SegmentationLoss, RcoveryDetectionLoss
+from ultralytics.utils.loss import v8ClassificationLoss,v8DetectionLoss, v8PoseLoss, v8SegmentationLoss, RcoveryDetectionLoss
 from ultralytics.utils.plotting import feature_visualization
 from ultralytics.utils.torch_utils import (fuse_conv_and_bn, fuse_deconv_and_bn, initialize_weights, intersect_dicts,
                                            make_divisible, model_info, scale_img, time_sync)
@@ -313,7 +314,70 @@ class DetectionModel(BaseModel):
 
     # 重写了BaseModel的init_criterion()
     def init_criterion(self):
-        return RcoveryDetectionLoss(self)
+        return v8DetectionLoss(self)
+
+
+class LowLightDetectionModel(DetectionModel):
+    """Custom YOLOv8 detection model supporting lowlight_recovery module with restoration loss."""
+    def __init__(self, cfg='yolov8n.yaml', ch=3, nc=None, verbose=True):
+        super().__init__(cfg=cfg, ch=ch, nc=nc, verbose=verbose)
+        self.lowlight_recovery_idx = None  # Store lowlight_recovery index
+        # Re-parse model to get lowlight_recovery_idx
+        model, savelist, lowlight_recovery_idx = parse_lowlight_model(self.yaml, ch=[ch], verbose=verbose)
+        self.model = model
+        self.save = savelist
+        self.lowlight_recovery_idx = lowlight_recovery_idx
+        initialize_weights(self)
+
+    def _forward_once(self, x, gt_images=None, profile=False, visualize=False):
+        y, dt = [], []
+        losses = {}  # Store all losses
+        restored_img = None
+
+        for i, m in enumerate(self.model):
+            if m.f != -1:
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
+            if profile:
+                self._profile_one_layer(m, x, dt)
+
+            # Handle lowlight_recovery module
+            if i == self.lowlight_recovery_idx:
+                x, restoration_loss = m(x, gt_images)
+                if restoration_loss is not None and self.training:
+                    losses['restoration_loss'] = restoration_loss
+            else:
+                x = m(x)
+
+            y.append(x if m.i in self.save else None)
+            if visualize:
+                self._visualize_layer(x, m.i)
+
+        if self.training:
+            if isinstance(x, tuple):  # Detect head output
+                pred, det_losses = x
+                losses.update(det_losses)
+                return pred, losses, restored_img
+            return x, losses, restored_img
+        return x
+
+    def forward(self, x, gt_images=None, *args, **kwargs):
+        if self.augment and self.training:
+            return self._forward_augment(x)
+        return self._forward_once(x, gt_images=gt_images, *args, **kwargs)
+
+    def loss(self, batch, preds=None):
+        if preds is None:
+            imgs = batch['img']
+            gt_images = batch.get('gt_images')
+            preds = self.forward(imgs, gt_images=gt_images)
+
+        if isinstance(preds, tuple) and len(preds) == 3:
+            pred, losses, _ = preds
+        else:
+            pred, losses = preds, {}
+
+        total_loss = sum(losses.values()) if losses else torch.tensor(0.0, device=self.device)
+        return total_loss, losses
 
 
 class SegmentationModel(DetectionModel):
@@ -678,6 +742,98 @@ def attempt_load_one_weight(weight, device=None, inplace=True, fuse=False):
     return model, ckpt
 
 
+def parse_lowlight_model(d, ch, verbose=True):
+
+    import ast
+    # Args
+    max_channels = float('inf')
+    nc, act, scales = (d.get(x) for x in ('nc', 'activation', 'scales'))
+    depth, width, kpt_shape = (d.get(x, 1.0) for x in ('depth_multiple', 'width_multiple', 'kpt_shape'))
+    if scales:
+        scale = d.get('scale')
+        if not scale:
+            scale = tuple(scales.keys())[0]
+            LOGGER.warning(f"WARNING ⚠️ no model scale passed. Assuming scale='{scale}'.")
+        depth, width, max_channels = scales[scale]
+
+    if act:
+        Conv.default_act = eval(act)
+        if verbose:
+            LOGGER.info(f"{colorstr('activation:')} {act}")
+
+    if verbose:
+        LOGGER.info(f"\n{'':>3}{'from':>20}{'n':>3}{'params':>10}  {'module':<45}{'arguments':<30}")
+
+    ch = [ch]
+    layers, save, c2 = [], [], ch[-1]
+    lowlight_recovery_idx = None  # 记录 lowlight_recovery 的索引
+
+    for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):
+        m = getattr(torch.nn, m[3:]) if 'nn.' in m else globals()[m]
+        for j, a in enumerate(args):
+            if isinstance(a, str):
+                with contextlib.suppress(ValueError):
+                    args[j] = locals()[a] if a in locals() else ast.literal_eval(a)
+        n = n_ = max(round(n * depth), 1) if n > 1 else n
+        if m in (Classify, Conv, ConvTranspose, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, Focus,
+                 BottleneckCSP, C1, C2, C2f, C3, C3TR, C3Ghost, nn.ConvTranspose2d, DWConvTranspose2d, C3x, RepC3,
+                 FasterC2f_N, FasterC2f, PconvBottleneck, PconvBottleneck_n, PConv, SCConv, SCConvBottleneck, SCC2f,
+                 SC_PW_Bottleneck, SC_PW_C2f, SC_Conv3_Bottleneck, SC_Conv3_C2f, Conv3_SC_C2f, Conv3_SC_Bottleneck):
+            c1, c2 = ch[f], args[0]
+            if c2 != nc:
+                c2 = make_divisible(min(c2, max_channels) * width, 8)
+            args = [c1, c2, *args[1:]]
+            if m in (BottleneckCSP, C1, C2, C2f, C3, C3TR, C3Ghost, C3x, RepC3, FasterC2f_N, FasterC2f, SCC2f,
+                     SC_PW_C2f, SC_Conv3_C2f, Conv3_SC_C2f):
+                args.insert(2, n)
+                n = 1
+        elif m is AIFI:
+            args = [ch[f], *args]
+        elif m in (HGStem, HGBlock):
+            c1, cm, c2 = ch[f], args[0], args[1]
+            args = [c1, cm, c2, *args[2:]]
+            if m is HGBlock:
+                args.insert(4, n)
+                n = 1
+        elif m is nn.BatchNorm2d:
+            args = [ch[f]]
+        elif m is Concat:
+            c2 = sum(ch[x] for x in f)
+        elif m is lowlight_recovery:
+            c2 = args[0]
+            lowlight_recovery_idx = i  # 记录 lowlight_recovery 的索引
+        elif m is MFRU:
+            c2 = 256
+        elif m in (AsffDoubLevel, AsffTribeLevel):
+            if m is AsffDoubLevel:
+                c2 = 512 if args[0] == 0 else 256
+            elif m is AsffTribeLevel:
+                c2 = 512 if args[0] in (0, 1) else 256
+        elif m in (Detect, Segment, Pose, AsffDetect):
+            args.append([ch[x] for x in f])
+            if m is Segment:
+                args[2] = make_divisible(min(args[2], max_channels) * width, 8)
+        elif m is RTDETRDecoder:
+            args.insert(1, [ch[x] for x in f])
+        else:
+            c2 = ch[f]
+
+        m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
+        t = str(m)[8:-2].replace('__main__.', '')
+        m.np = sum(x.numel() for x in m_.parameters())
+        m_.i, m_.f, m_.type = i, f, t
+        if verbose:
+            LOGGER.info(f'{i:>3}{str(f):>20}{n_:>3}{m.np:10.0f}  {t:<45}{str(args):<30}')
+        save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)
+        layers.append(m_)
+        if i == 0:
+            ch = []
+        ch.append(c2)
+
+    return nn.Sequential(*layers), sorted(save), lowlight_recovery_idx
+
+
+
 # 将model文件的字典信息转化为pytorch的模型结构
 def parse_model(d, ch, verbose=True):
     """Parse a YOLO model.yaml dictionary into a PyTorch model."""
@@ -751,7 +907,6 @@ def parse_model(d, ch, verbose=True):
                 # 将参数中的第二个位置的参数重复n次
                 args.insert(2, n)  # number of repeats
                 n = 1
-
         elif m is AIFI:
             args = [ch[f], *args]
         elif m in (HGStem, HGBlock):
