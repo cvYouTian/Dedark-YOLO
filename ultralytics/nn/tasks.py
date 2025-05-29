@@ -14,7 +14,7 @@ from ultralytics.nn.modules import (lowlight_recovery, AIFI, C1, C2, C3, C3TR, S
 
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
-from ultralytics.utils.loss import v8ClassificationLoss,v8DetectionLoss, v8PoseLoss, v8SegmentationLoss, RcoveryDetectionLoss
+from ultralytics.utils.loss import RcoveryDetectionLoss, v8ClassificationLoss,v8DetectionLoss, v8PoseLoss, v8SegmentationLoss, RcoveryDetectionLoss
 from ultralytics.utils.plotting import feature_visualization
 from ultralytics.utils.torch_utils import (fuse_conv_and_bn, fuse_deconv_and_bn, initialize_weights, intersect_dicts,
                                            make_divisible, model_info, scale_img, time_sync)
@@ -85,7 +85,7 @@ class BaseModel(nn.Module):
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
             if profile:
                 self._profile_one_layer(m, x, dt)
-            if isinstance(m,lowlight_recovery):
+            if isinstance(m, lowlight_recovery):
                 x, rloss = m(x)
             else:
                 x = m(x)   # run
@@ -248,6 +248,11 @@ class DetectionModel(BaseModel):
             self.yaml['nc'] = nc
         # model, savelist
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)
+        #  添加低光模块的索引
+        for i, m in enumerate(self.model):
+            if isinstance(m, lowlight_recovery):
+                self.lowlight_recovery_idx = i
+
         # name = {0:'0', 1:'1',...
         self.names = {i: f'{i}' for i in range(self.yaml['nc'])}  # default names dict
         # 添加一个新的键值对{inplace:True}
@@ -274,6 +279,53 @@ class DetectionModel(BaseModel):
         if verbose:
             self.info()
             LOGGER.info('')
+
+    def forward(self, x, *args, **kwargs):
+        """
+        Forward pass of the model, handling both training/validation and inference.
+
+        Args:
+            x (torch.Tensor | dict): Input tensor [batch_size, 3, h, w] or dict with 'img', 'cls', etc.
+            gt_images (torch.Tensor, optional): Ground truth enhanced images [batch_size, 3, h, w].
+            profile (bool): Profile layer performance if True.
+            visualize (bool): Visualize feature maps if True.
+
+        Returns:
+            torch.Tensor or tuple: Predictions (inference) or (predictions, losses, restored_img) (training/validation).
+        """
+        if isinstance(x, dict):  # Training or validation mode
+            y, dt = [], []  # Outputs and profiling times
+            batch = x
+            x = batch['img']  # Extract input tensor [batch_size, 3, h, w]
+
+            for i, m in enumerate(self.model):
+                # Determine input based on 'from' index
+                if m.f != -1:  # If not from previous layer
+                    x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
+
+                # Handle lowlight_recovery module
+                if i == self.lowlight_recovery_idx and self.lowlight_recovery_idx is not None:
+                    x, recovery_loss = m(x)
+                    if recovery_loss is not None:
+                        batch['recovery_loss'] = recovery_loss
+                        LOGGER.info(f"Stored recovery_loss: {recovery_loss.item():.4f}")
+                else:
+                    x = m(x)  # Run standard module
+                #
+                # if profile:
+                #     self._profile_one_layer(m, x, dt)
+                y.append(x if m.i in self.save else None)  # Save output
+                # if visualize:
+                #     feature_visualization(x, m.type, m.i, save_dir=visualize)
+
+            # Compute loss
+            loss_output = self.loss(batch, x)
+            return loss_output
+
+        # Inference mode
+        # return self._predict_once(x, profile=profile, visualize=visualize)
+        return self.predict(x, *args, **kwargs)
+
 
     def _predict_augment(self, x):
         """Perform augmentations on input image x and return augmented inference and train outputs."""
@@ -314,7 +366,8 @@ class DetectionModel(BaseModel):
 
     # 重写了BaseModel的init_criterion()
     def init_criterion(self):
-        return v8DetectionLoss(self)
+        return RcoveryDetectionLoss(self)
+        # return v8DetectionLoss(self)
 
 
 class LowLightDetectionModel(DetectionModel):
@@ -329,55 +382,52 @@ class LowLightDetectionModel(DetectionModel):
         self.lowlight_recovery_idx = lowlight_recovery_idx
         initialize_weights(self)
 
-    def _forward_once(self, x, gt_images=None, profile=False, visualize=False):
-        y, dt = [], []
-        losses = {}  # Store all losses
-        restored_img = None
+    def forward(self, x, *args, **kwargs):
+        """
+                Forward pass of the model, handling both training/validation and inference.
 
-        for i, m in enumerate(self.model):
-            if m.f != -1:
-                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
-            if profile:
-                self._profile_one_layer(m, x, dt)
+                Args:
+                    x (torch.Tensor | dict): Input tensor [batch_size, 3, h, w] or dict containing 'img', 'cls', etc.
+                    gt_images (torch.Tensor, optional): Ground truth enhanced images [batch_size, 3, h, w].
+                    profile (bool): Profile layer performance if True.
+                    visualize (bool): Visualize feature maps if True.
 
-            # Handle lowlight_recovery module
-            if i == self.lowlight_recovery_idx:
-                x, restoration_loss = m(x, gt_images)
-                if restoration_loss is not None and self.training:
-                    losses['restoration_loss'] = restoration_loss
-            else:
-                x = m(x)
+                Returns:
+                    torch.Tensor or tuple: Predictions (inference) or (predictions, losses, restored_img) (training/validation).
+                """
+        if isinstance(x, dict):  # Training or validation mode
+            y, dt = [], []  # Outputs and profiling times
+            restored_img = None  # Store restored image
+            batch = x  # Input batch dict
+            x = batch['img']  # Extract input tensor [batch_size, 3, 640, 640]
 
-            y.append(x if m.i in self.save else None)
-            if visualize:
-                self._visualize_layer(x, m.i)
+            # Forward pass through model
+            for i, m in enumerate(self.model):
+                # Determine input based on 'from' index
+                if m.f != -1:  # If not from previous layer
+                    x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
 
-        if self.training:
-            if isinstance(x, tuple):  # Detect head output
-                pred, det_losses = x
-                losses.update(det_losses)
-                return pred, losses, restored_img
-            return x, losses, restored_img
-        return x
+                # Handle lowlight_recovery module
+                if i == self.lowlight_recovery_idx and self.lowlight_recovery_idx is not None:
+                    x, restoration_loss = m(x)
+                    restored_img = x  # Store restored image for return
+                    if restoration_loss is not None:
+                        batch['recovery_loss'] = restoration_loss  # Store for RcoveryDetectionLoss
+                        LOGGER.info(f"Stored restoration_loss: {restoration_loss.item():.4f}")
+                else:
+                    x = m(x)  # Run standard module
 
-    def forward(self, x, gt_images=None, *args, **kwargs):
-        if self.augment and self.training:
-            return self._forward_augment(x)
-        return self._forward_once(x, gt_images=gt_images, *args, **kwargs)
+                y.append(x if m.i in self.save else None)  # Save output
 
-    def loss(self, batch, preds=None):
-        if preds is None:
-            imgs = batch['img']
-            gt_images = batch.get('gt_images')
-            preds = self.forward(imgs, gt_images=gt_images)
+            # Compute loss
+            loss_output = self.loss(batch, x)
+            return loss_output + (restored_img,) if restored_img is not None else loss_output
 
-        if isinstance(preds, tuple) and len(preds) == 3:
-            pred, losses, _ = preds
-        else:
-            pred, losses = preds, {}
+        # Inference mode
+        return self.predict(x, *args, **kwargs)
 
-        total_loss = sum(losses.values()) if losses else torch.tensor(0.0, device=self.device)
-        return total_loss, losses
+    def init_criterion(self):
+        return RcoveryDetectionLoss(self, recovery_weight=2.0)
 
 
 class SegmentationModel(DetectionModel):

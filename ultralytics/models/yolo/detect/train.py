@@ -3,78 +3,10 @@ import numpy as np
 from ultralytics.data import build_dataloader, build_yolo_dataset
 from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.models import yolo
-from ultralytics.nn.tasks import DetectionModel
+from ultralytics.nn.tasks import DetectionModel, LowLightDetectionModel
 from ultralytics.utils import DEFAULT_CFG, LOGGER, RANK
 from ultralytics.utils.plotting import plot_images, plot_labels, plot_results
 from ultralytics.utils.torch_utils import de_parallel, torch_distributed_zero_first
-import random
-from ultralytics.nn.modules.config_lowlight import cfg
-from ultralytics.nn.modules.common import ExtractParameters2
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-
-# class LowLightRecovery(nn.Module):
-#     def __init__(self, input_channels=3, output_channels=3, lowlight_param=1.0, cfg=None):
-#         """
-#         Initialize the LowLightRecovery module for low-light image enhancement.
-#
-#         Args:
-#             input_channels (int): Number of input channels (default: 3 for RGB).
-#             output_channels (int): Number of output channels (default: 3 for RGB).
-#             lowlight_param (float): Parameter for low-light simulation (default: 1.0).
-#             cfg (object): Configuration object containing extractor and filters.
-#         """
-#         super().__init__()
-#         # Initialize feature extractor and filters
-#         self.extractor = ExtractParameters2(cfg)
-#         self.filters = nn.ModuleList(cfg.filters)
-#         self.lowlight_param = float(lowlight_param)  # Ensure float for consistency
-#
-#         # Validate input/output channels (optional, can be removed if not needed)
-#         if not isinstance(self.extractor, nn.Module) or not all(isinstance(f, nn.Module) for f in self.filters):
-#             raise ValueError("extractor and filters must be nn.Module instances")
-#
-#     def forward(self, x):
-#         """
-#         Forward pass for low-light image enhancement.
-#
-#         Args:
-#             x (torch.Tensor): Input image tensor of shape (batch, channels, height, width).
-#
-#         Returns:
-#             tuple: (enhanced_image, recovery_loss)
-#                 - enhanced_image (torch.Tensor): Enhanced image tensor.
-#                 - recovery_loss (torch.Tensor): Mean squared error between enhanced and original images.
-#         """
-#         # Ensure module is on the same device as input
-#         device = x.device
-#         self.to(device)
-#
-#         # Store original image for loss computation
-#         input_data_clean = x
-#
-#         # Simulate low-light condition
-#         input_data = torch.pow(x, self.lowlight_param)
-#
-#         # Clone for filtered output
-#         filtered_image_batch = input_data.clone()
-#
-#         # Resize input for feature extraction
-#         input_data = F.interpolate(input_data, size=(256, 256), mode='bilinear')
-#
-#         # Extract features
-#         filter_features = self.extractor(input_data)
-#
-#         # Apply filters sequentially
-#         for filter_module in self.filters:
-#             filtered_image_batch, _ = filter_module(filtered_image_batch, filter_features)
-#
-#         # Compute recovery loss (mean squared error)
-#         recovery_loss = F.mse_loss(filtered_image_batch, input_data_clean)
-#
-#         return filtered_image_batch, recovery_loss
 
 
 class DetectionTrainer(BaseTrainer):
@@ -127,6 +59,7 @@ class DetectionTrainer(BaseTrainer):
     def get_model(self, cfg=None, weights=None, verbose=True):
         """Return a YOLO detection model."""
         model = DetectionModel(cfg, nc=self.data['nc'], verbose=verbose and RANK == -1)
+        # model = LowLightDetectionModel(cfg, nc=self.data['nc'], verbose=verbose and RANK == -1)
         if weights:
             model.load(weights)
         return model
@@ -191,8 +124,3 @@ def train(cfg=DEFAULT_CFG, use_python=False):
 
 if __name__ == '__main__':
     train()
-    #
-    # model = LowLightRecovery(cfg=cfg, input_channels=3, output_channels=3).to('cuda')
-    # images = torch.randn(8, 3, 448, 672).to('cuda')
-    # enhanced, loss = model(images)
-    # print(f"Input shape: {images.shape}, Output shape: {enhanced.shape}, Loss: {loss.item()}")

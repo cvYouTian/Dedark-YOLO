@@ -1,68 +1,70 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 import random
+import cv2
+import os
 from .config_lowlight import cfg
 from .common import ExtractParameters2
 
 __all__ = ("lowlight_recovery")
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
 
 class lowlight_recovery(nn.Module):
-    def __init__(self, input=3, output=3, lowlight_param=1):
+    def __init__(self, in_channels=3, out_channels=3, lowlight_param=1.0):
         super().__init__()
-        # 确保extractor在GPU上
         self.extractor = ExtractParameters2(cfg)
+        self.filters = nn.ModuleList(cfg.filters)
+        self.lowlight_param = random.uniform(5, 10)
+        self.save_dir = "filtered_images"  # 保存目录
+        os.makedirs(self.save_dir, exist_ok=True)  # 创建目录
 
-        # 确保所有filter都在GPU上
-        self.filters = nn.ModuleList([f for f in cfg.filters])
+    def save_filtered_image(self, filtered_image, batch_idx):
+        """保存 filtered_image 的每张图像到磁盘"""
+        filtered_image = filtered_image.detach().cpu().numpy()  # [batch_size, 3, h, w]
+        batch_size = filtered_image.shape[0]
+        for i in range(batch_size):
+            img = filtered_image[i].transpose(1, 2, 0)  # [h, w, 3]
+            img = (img * 255).astype(np.uint8)  # 转换为 [0, 255]
+            img = img[:, :, ::-1]  # RGB to BGR for OpenCV
+            save_path = os.path.join(self.save_dir, f"filtered_{batch_idx}_{i}.jpg")
+            cv2.imwrite(save_path, img)
+            print(f"Saved image: {save_path}")
 
-        self.lowlight_param = lowlight_param if lowlight_param == 1 else random.uniform(1.5, 5)
+    def forward(self, x, gt_images=None, batch_idx=0):
+        # Ensure input is on the correct device
+        self.to(x.device)
 
-        # 确保所有参数在GPU上
-        # self.to(device)  # 这是关键修复
-    def forward(self, x):
-        if x.device == "cuda":
-            input_data_clean = x
-            device = x.device
-            self.to(device)
+        # Apply lowlight transformation
+        input_data = torch.pow(x, self.lowlight_param)
+        print(f"Input shape: {x.shape}")  # 调试
 
-            input_data = torch.pow(x, self.lowlight_param).to(device)
-            filtered_image_batch = input_data.clone()
+        # Interpolate to fixed size
+        input_data_resized = F.interpolate(input_data, size=(256, 256), mode='bilinear', align_corners=False)
 
-            # 插值操作
-            input_data = F.interpolate(input_data, size=(256, 256), mode='bilinear').to(device)
+        # Feature extraction
+        filter_features = self.extractor(input_data_resized)
 
-            # 特征提取
-            filter_features = self.extractor(input_data)
+        # Apply filters
+        filtered_image = input_data.clone()
+        for filter in self.filters:
+            filtered_image, _ = filter(filtered_image, filter_features)
+        print(f"Filtered shape: {filtered_image.shape}")  # 调试
 
-            # 应用过滤器（确保所有输入输出在相同设备）
-            filter_parameters = []
-            for filter in self.filters:
-                filtered_image_batch, param = filter(filtered_image_batch, filter_features)
-                filter_parameters.append(param)
+        # Ensure output in [0, 1]
+        filtered_image = torch.clamp(filtered_image, 0, 1)
 
+        # Save filtered images
+        with torch.no_grad():
+            self.save_filtered_image(filtered_image, batch_idx)
+
+        # Compute recovery loss
+        recovery_loss = None
+        if gt_images is not None:
+            recovery_loss = F.mse_loss(filtered_image, gt_images)
+            print(f"Recovery loss: {recovery_loss.item():.4f}")  # 调试
         else:
-            input_data_clean = x  # 保留原始数据
+            recovery_loss = F.mse_loss(filtered_image, x)  # 使用输入作为目标
 
-            # 使用PyTorch操作替代NumPy（保持自动微分）
-            input_data = torch.pow(x, self.lowlight_param)
-            filtered_image_batch = input_data.clone()
-
-            # 插值操作
-            input_data = F.interpolate(input_data, size=(256, 256), mode='bilinear')
-
-            # 特征提取
-            filter_features = self.extractor(input_data)
-
-            # 应用过滤器（确保所有输入输出在相同设备）
-            filter_parameters = []
-            for filter in self.filters:
-                filtered_image_batch, param = filter(filtered_image_batch, filter_features)
-                filter_parameters.append(param)
-
-        recovery_loss = torch.sum((filtered_image_batch - input_data_clean) ** 2)
-
-        return filtered_image_batch, recovery_loss
+        return filtered_image, recovery_loss

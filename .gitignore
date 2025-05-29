@@ -8,6 +8,7 @@ checkpoints/
 pytorch_file/Graph-of-Paper/
 .idea/
 *.png
+
 pytorch_file/data/
 # Distribution / packaging
 .Python

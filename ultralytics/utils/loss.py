@@ -387,25 +387,31 @@ class v8ClassificationLoss:
 
 
 class RcoveryDetectionLoss(v8DetectionLoss):
-    def __init__(self, model, recovery_weight=2.0):
+    def __init__(self, model):
         super().__init__(model)
-        self.recovery_weight = recovery_weight
+        self.recovery_weight = self.hyp.lrl  # 恢复损失权重，例如 0.1
 
     def __call__(self, preds, batch):
         # Compute standard detection loss
-        loss, loss_items = super().__call__(preds, batch)
+        loss, loss_items = super().__call__(preds, batch)  # loss_items: [box_loss, cls_loss, dfl_loss]
 
-        # Add recovery loss if present
-        if 'recovery_loss' in batch:
-            # 打印日志用于检查loss是否下降
-            print(f"Recovery Loss: {batch['recovery_loss'].item():.4f}")
+        # Extract individual loss components
+        box_loss, cls_loss, dfl_loss = loss_items
+
+        # Add recovery loss to cls_loss if present
+        if 'recovery_loss' in batch and batch['recovery_loss'] is not None:
             recovery_loss = batch['recovery_loss']
-            # Ensure recovery_loss is a scalar tensor
+            # Ensure recovery_loss is a scalar
             if recovery_loss.ndim > 0:
                 recovery_loss = recovery_loss.mean()
-            # Add weighted recovery loss to total loss
+            # Add weighted recovery loss to cls_loss
+            cls_loss = cls_loss + self.recovery_weight * recovery_loss
+            # Update total loss
             loss += self.recovery_weight * recovery_loss
-            # Append recovery loss to loss_items for logging
-            loss_items = torch.cat((loss_items, recovery_loss.detach().view(1)))
+        else:
+            recovery_loss = torch.tensor(0.0, device=loss.device)
+
+        # Reconstruct loss_items with updated cls_loss
+        loss_items = torch.tensor([box_loss, cls_loss, dfl_loss], device=loss.device)
 
         return loss, loss_items
