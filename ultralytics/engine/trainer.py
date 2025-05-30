@@ -25,7 +25,6 @@ from ultralytics.utils.torch_utils import (EarlyStopping, ModelEMA, de_parallel,
                                            strip_optimizer)
 
 
-
 class BaseTrainer:
     """
     BaseTrainer

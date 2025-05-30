@@ -14,7 +14,7 @@ from ultralytics.nn.modules import (lowlight_recovery, AIFI, C1, C2, C3, C3TR, S
 
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
-from ultralytics.utils.loss import RcoveryDetectionLoss, v8ClassificationLoss,v8DetectionLoss, v8PoseLoss, v8SegmentationLoss, RcoveryDetectionLoss
+from ultralytics.utils.loss import v8ClassificationLoss, v8PoseLoss, v8SegmentationLoss, RcoveryDetectionLoss
 from ultralytics.utils.plotting import feature_visualization
 from ultralytics.utils.torch_utils import (fuse_conv_and_bn, fuse_deconv_and_bn, initialize_weights, intersect_dicts,
                                            make_divisible, model_info, scale_img, time_sync)
@@ -281,6 +281,7 @@ class DetectionModel(BaseModel):
             self.info()
             LOGGER.info('')
 
+    # 这里重写了Basemodel的forward方法,如果将其删掉,就是原版的代码
     def forward(self, x, *args, **kwargs):
         """
         Forward pass of the model, handling both training/validation and inference.
@@ -326,7 +327,6 @@ class DetectionModel(BaseModel):
         # Inference mode
         # return self._predict_once(x, profile=profile, visualize=visualize)
         return self.predict(x, *args, **kwargs)
-
 
     def _predict_augment(self, x):
         """Perform augmentations on input image x and return augmented inference and train outputs."""
