@@ -12,4 +12,7 @@
 
 # 为了实现低光照增强，我更改了detectionmodel
 
+# 在utils中加入lowlight_process函数用于保存加暗处理的图像
 
+# 如果要调节暗处理的强度
+- 调节lite的lowlight的参数

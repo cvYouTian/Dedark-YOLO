@@ -8,6 +8,7 @@ import os
 from .config_lowlight import cfg
 from .common import ExtractParameters2
 
+
 __all__ = ("lowlight_recovery")
 
 
@@ -16,18 +17,18 @@ class lowlight_recovery(nn.Module):
         super().__init__()
         self.extractor = ExtractParameters2(cfg)
         self.filters = nn.ModuleList(cfg.filters)
-        self.lowlight_param = random.uniform(5, 10)
+        self.lowlight_param = 7.5
         self.save_dir = "filtered_images"  # 保存目录
         os.makedirs(self.save_dir, exist_ok=True)  # 创建目录
 
     def save_image(self, filtered_image, batch_idx):
         """保存 filtered_image 的每张图像到磁盘"""
-        filtered_image = filtered_image.detach().cpu().numpy()  # [batch_size, 3, h, w]
+        filtered_image = filtered_image.detach().cpu().numpy()
         batch_size = filtered_image.shape[0]
         for i in range(batch_size):
-            img = filtered_image[i].transpose(1, 2, 0)  # [h, w, 3]
-            img = (img * 255).astype(np.uint8)  # 转换为 [0, 255]
-            img = img[:, :, ::-1]  # RGB to BGR for OpenCV
+            img = filtered_image[i].transpose(1, 2, 0)
+            img = (img * 255).astype(np.uint8)
+            img = img[:, :, ::-1]
             save_path = os.path.join(self.save_dir, f"filtered_{batch_idx}_{i}.jpg")
             cv2.imwrite(save_path, img)
             print(f"Saved image: {save_path}")
