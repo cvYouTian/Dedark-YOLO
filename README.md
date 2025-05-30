@@ -4,4 +4,12 @@
 
 # validator
 - 将yolo8的半精度改成float32
-- 
+ 
+# yolov8.yaml
+- asff、rbf只使用于l版本，这里的参数的调整没有写好，导致只兼容yolo的l版本
+
+# 在default.yaml中添加 lrl用于低光照损失的权值
+
+# 为了实现低光照增强，我更改了detectionmodel
+
+

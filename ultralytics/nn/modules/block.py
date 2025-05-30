@@ -161,57 +161,6 @@ class AsffDoubLevel(nn.Module):
 
         return out
 
-
-# class MFRU(nn.Module):
-#     """多尺度特征重构单元
-#     使用SRU来设计
-#     """
-#     def __init__(self, level):
-#         super(MFRU, self).__init__()
-#         compress_c = 16
-#
-#         self.scconv = SCConv(512)
-#         self.scconv_s = SCConv(256)
-#
-#         self.pwconv0 = nn.Conv2d(512, 256, 1, 1, 0)
-#         self.pwconv1 = nn.Conv2d(512, 256, 1, 1, 0)
-#         self.pwconv2 = nn.Conv2d(256, 256, 1, 1, 0)
-#
-#         self.weight_level_0 = nn.Conv2d(256, compress_c, 1, 1, 0)
-#         self.weight_level_1 = nn.Conv2d(256, compress_c, 1, 1, 0)
-#         self.weight_level_2 = nn.Conv2d(256, compress_c, 1, 1, 0)
-#
-#         self.weight_levels = nn.Conv2d(compress_c * 3, 3, 1, 1, 0)
-#
-#     def forward(self, x):
-#         """
-#         Args:
-#             [20, 40 , 80]
-#         """
-#         level_0 = self.pwconv0(x[0])
-#         level_0_resized = self.scconv(F.interpolate(level_0, scale_factor=4, mode='nearest'))
-#
-#         level_1 = self.pwconv1(x[1])
-#         level_1_resized = self.scconv(F.interpolate(level_1, scale_factor=2, mode='nearest'))
-#
-#         level_2 = self.pwconv2(x[2])
-#         level_2_resized = self.scconv_s(level_2)
-#
-#         level_0_weight_v = self.weight_level_0(level_0_resized)
-#         level_1_weight_v = self.weight_level_1(level_1_resized)
-#         level_2_weight_v = self.weight_level_2(level_2_resized)
-#
-#         levels_weight_v = torch.cat((level_0_weight_v, level_1_weight_v, level_2_weight_v), 1)
-#         levels_weight = self.weight_levels(levels_weight_v)
-#
-#         levels_weight = F.softmax(levels_weight, dim=1)
-#
-#         fused_out_reduced = level_0_resized * levels_weight[:, 0:1, :, :] + \
-#                             level_1_resized * levels_weight[:, 1:2, :, :] + \
-#                             level_2_resized * levels_weight[:, 2:, :, :]
-#
-#         return fused_out_reduced
-
 class MFRU(nn.Module):
     """多尺度特征重构单元
     使用SRU来设计
@@ -266,59 +215,6 @@ class MFRU(nn.Module):
         out = self.scconv256(fused_out_reduced)
 
         return out
-#
-# class MFRUL(nn.Module):
-#     """多尺度特征重构单元
-#     使用SRU来设计
-#     """
-#     def __init__(self, level):
-#         super(MFRUL, self).__init__()
-#         compress_c = 16
-#
-#         self.scconv = SCConv(128)
-#
-#         self.pwconv0 = nn.Conv2d(512, 128, 1, 1, 0)
-#         self.pwconv1 = nn.Conv2d(512, 128, 1, 1, 0)
-#         self.pwconv2 = nn.Conv2d(256, 128, 1, 1, 0)
-#
-#         self.weight_level_0 = nn.Conv2d(128, compress_c, 1, 1, 0)
-#         self.weight_level_1 = nn.Conv2d(128, compress_c, 1, 1, 0)
-#         self.weight_level_2 = nn.Conv2d(128, compress_c, 1, 1, 0)
-#
-#         self.weight_levels = nn.Conv2d(compress_c * 3, 3, 1, 1, 0)
-#
-#     def forward(self, x):
-#         """
-#         Args:
-#             [20, 40 , 80]
-#         """
-#         level_0 = self.pwconv0(x[0])
-#         level_0_resized = self.scconv(F.interpolate(level_0, scale_factor=8, mode='nearest'))
-#
-#         level_1 = self.pwconv1(x[1])
-#         level_1_resized = self.scconv(F.interpolate(level_1, scale_factor=4, mode='nearest'))
-#
-#         level_2 = self.pwconv2(x[2])
-#         level_2_resized = self.scconv(F.interpolate(level_2, scale_factor=2, mode="nearest"))
-#
-#         level_0_weight_v = self.weight_level_0(level_0_resized)
-#         level_1_weight_v = self.weight_level_1(level_1_resized)
-#         level_2_weight_v = self.weight_level_2(level_2_resized)
-#
-#         levels_weight_v = torch.cat((level_0_weight_v, level_1_weight_v, level_2_weight_v), 1)
-#         levels_weight = self.weight_levels(levels_weight_v)
-#         # 通道维
-#         levels_weight = F.softmax(levels_weight, dim=1)
-#
-#         fused_out_reduced = level_0_resized * levels_weight[:, 0:1, :, :] + \
-#                             level_1_resized * levels_weight[:, 1:2, :, :] + \
-#                             level_2_resized * levels_weight[:, 2:, :, :]
-#         # [80, 80, 256]
-#         out = fused_out_reduced
-#
-#         return out
-#
-
 
 
 class DFL(nn.Module):

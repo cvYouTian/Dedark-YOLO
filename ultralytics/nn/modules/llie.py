@@ -20,7 +20,7 @@ class lowlight_recovery(nn.Module):
         self.save_dir = "filtered_images"  # 保存目录
         os.makedirs(self.save_dir, exist_ok=True)  # 创建目录
 
-    def save_filtered_image(self, filtered_image, batch_idx):
+    def save_image(self, filtered_image, batch_idx):
         """保存 filtered_image 的每张图像到磁盘"""
         filtered_image = filtered_image.detach().cpu().numpy()  # [batch_size, 3, h, w]
         batch_size = filtered_image.shape[0]
@@ -32,13 +32,12 @@ class lowlight_recovery(nn.Module):
             cv2.imwrite(save_path, img)
             print(f"Saved image: {save_path}")
 
-    def forward(self, x, gt_images=None, batch_idx=0):
+    def forward(self, x, batch_idx=0):
         # Ensure input is on the correct device
         self.to(x.device)
 
         # Apply lowlight transformation
         input_data = torch.pow(x, self.lowlight_param)
-        print(f"Input shape: {x.shape}")  # 调试
 
         # Interpolate to fixed size
         input_data_resized = F.interpolate(input_data, size=(256, 256), mode='bilinear', align_corners=False)
@@ -50,21 +49,15 @@ class lowlight_recovery(nn.Module):
         filtered_image = input_data.clone()
         for filter in self.filters:
             filtered_image, _ = filter(filtered_image, filter_features)
-        print(f"Filtered shape: {filtered_image.shape}")  # 调试
 
         # Ensure output in [0, 1]
         filtered_image = torch.clamp(filtered_image, 0, 1)
 
         # Save filtered images
-        with torch.no_grad():
-            self.save_filtered_image(filtered_image, batch_idx)
+        # with torch.no_grad():
+        #     self.save_image(filtered_image, batch_idx)
 
         # Compute recovery loss
-        recovery_loss = None
-        if gt_images is not None:
-            recovery_loss = F.mse_loss(filtered_image, gt_images)
-            print(f"Recovery loss: {recovery_loss.item():.4f}")  # 调试
-        else:
-            recovery_loss = F.mse_loss(filtered_image, x)  # 使用输入作为目标
+        recovery_loss = F.mse_loss(filtered_image, x)  # 使用输入作为目标
 
         return filtered_image, recovery_loss

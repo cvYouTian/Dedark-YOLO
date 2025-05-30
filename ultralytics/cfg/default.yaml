@@ -5,11 +5,11 @@ task: detect  # (str) YOLO task, i.e. detect, segment, classify, pose
 mode: train  # (str) YOLO mode, i.e. train, val, predict, export, track, benchmark
 
 # Train settings -------------------------------------------------------------------------------------------------------
-model:  /home/youtian/Documents/pro/pyCode/ultralytics-YOLOv8/runs/detect/train27/weights/best.pt # (str, optional) path to model file, i.e. yolov8n.pt, yolov8n.yaml
-data:  coco128.yaml # (str, optional) path to data file, i.e. coco128.yaml
+model:  # (str, optional) path to model file, i.e. yolov8n.pt, yolov8n.yaml
+data:  # (str, optional) path to data file, i.e. coco128.yaml
 epochs: 100  # (int) number of epochs to train for
 patience: 50  # (int) epochs to wait for no observable improvement for early stopping of training
-batch: 4  # (int) number of images per batch (-1 for AutoBatch)
+batch: 2  # (int) number of images per batch (-1 for AutoBatch)
 imgsz: 640  # (int | list) input images size as int for train and val modes, or list[w,h] for predict and export modes
 save: True  # (bool) save train checkpoints and predict results
 save_period: -1 # (int) Save checkpoint every x epochs (disabled if < 1)

@@ -31,7 +31,7 @@ def train():
 
 def train_lowght():
     # Load a model
-    model = YOLO('yolov8n.yaml')
+    model = YOLO('yolov8l.yaml')
     model.train(data="coco128.yaml", epochs=5, imgsz=640)
 
 
