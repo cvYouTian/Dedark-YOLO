@@ -85,6 +85,7 @@ class BaseModel(nn.Module):
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
             if profile:
                 self._profile_one_layer(m, x, dt)
+            # 这里为了让的训练前的验证阶段的通过,设计了一个针对模块的判断
             if isinstance(m, lowlight_recovery):
                 x, rloss = m(x)
             else:
@@ -308,7 +309,7 @@ class DetectionModel(BaseModel):
                     x, recovery_loss = m(x)
                     if recovery_loss is not None:
                         batch['recovery_loss'] = recovery_loss
-                        LOGGER.info(f"Stored recovery_loss: {recovery_loss.item():.4f}")
+                        # LOGGER.info(f"Stored recovery_loss: {recovery_loss.item():.4f}")
                 else:
                     x = m(x)  # Run standard module
                 #
