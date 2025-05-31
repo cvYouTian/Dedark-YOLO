@@ -23,6 +23,7 @@ lib64/
 parts/
 sdist/
 var/
+*.onnx
 wheels/
 share/python-wheels/
 *.egg-info/
