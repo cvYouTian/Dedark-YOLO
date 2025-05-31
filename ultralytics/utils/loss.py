@@ -399,8 +399,8 @@ class RcoveryDetectionLoss(v8DetectionLoss):
         box_loss, cls_loss, dfl_loss = loss_items
 
         # Add recovery loss to cls_loss if present
-        if 'recovery_loss' in batch and batch['recovery_loss'] is not None:
-            recovery_loss = batch['recovery_loss']
+        if 'recovery_loss_batch' in batch and batch['recovery_loss_batch'] is not None:
+            recovery_loss = batch['recovery_loss_batch']
             # Ensure recovery_loss is a scalar
             if recovery_loss.ndim > 0:
                 recovery_loss = recovery_loss.mean()

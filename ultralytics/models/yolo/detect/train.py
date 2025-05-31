@@ -1,9 +1,11 @@
 from copy import copy
+import torch
 import numpy as np
+import torch.nn.functional as F
 from ultralytics.data import build_dataloader, build_yolo_dataset
 from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.models import yolo
-from ultralytics.nn.tasks import DetectionModel, LowLightDetectionModel
+from ultralytics.nn.tasks import DetectionModel
 from ultralytics.utils import DEFAULT_CFG, LOGGER, RANK
 from ultralytics.utils.plotting import plot_images, plot_labels, plot_results
 from ultralytics.utils.torch_utils import de_parallel, torch_distributed_zero_first
@@ -36,13 +38,12 @@ class DetectionTrainer(BaseTrainer):
 
     def preprocess_batch(self, batch):
         """Preprocesses a batch of images by scaling and converting to float."""
-        batch['img'] = batch['img'].to(self.device, non_blocking=True).float() / 255
-        #
-        # # # 这里是现低光照
-        # low = LowLightRecovery(cfg=cfg)
-        # enhance_img, recovery_loss = low(batch["img"])
-        # batch["img"] = enhance_img / 255
-        # batch["recovery_loss"] = recovery_loss
+        batch['clean_img'] = batch['img'].to(self.device, non_blocking=True).float() / 255
+        batch["img"] = torch.pow(batch["clean_img"], self.dark_param)
+
+        # recover_loss = torch.sum((batch["img"] - batch["clean_img"]) ** 2)
+        recover_loss = F.mse_loss(batch["img"], batch["clean_img"])
+        batch["recovery_loss_batch"] = recover_loss
 
         return batch
 

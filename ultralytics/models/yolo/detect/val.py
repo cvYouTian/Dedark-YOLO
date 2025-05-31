@@ -19,6 +19,8 @@ class DetectionValidator(BaseValidator):
         """Initialize detection model with necessary variables and settings."""
         super().__init__(dataloader, save_dir, pbar, args, _callbacks)
         self.args.task = 'detect'
+        # 添加
+        self.dark_param = self.args.dark_param
         self.is_coco = False
         self.class_map = None
         self.metrics = DetMetrics(save_dir=self.save_dir, on_plot=self.on_plot)
@@ -28,7 +30,12 @@ class DetectionValidator(BaseValidator):
     def preprocess(self, batch):
         """Preprocesses batch of images for YOLO training."""
         batch['img'] = batch['img'].to(self.device, non_blocking=True)
-        batch['img'] = (batch['img'].half() if self.args.half else batch['img'].float()) / 255
+        batch['clean_img'] = (batch['img'].half() if self.args.half else batch['img'].float()) / 255
+
+        batch["img"] = torch.pow(batch["clean_img"], self.dark_param)
+
+        recover_loss = torch.sum((batch["img"] - batch["clean_img"]) ** 2)
+        batch["recovery_loss_batch"] = recover_loss
 
         for k in ['batch_idx', 'cls', 'bboxes']:
             batch[k] = batch[k].to(self.device)
@@ -259,8 +266,8 @@ class DetectionValidator(BaseValidator):
 
 def val(cfg=DEFAULT_CFG, use_python=False):
     """Validate trained YOLO model on validation dataset."""
-    model = cfg.model or "yolov8n.pt"
-    data = cfg.data or "coco128.yaml"
+    model = cfg.model
+    data = cfg.data
 
     args = dict(model=model, data=data)
     if use_python:

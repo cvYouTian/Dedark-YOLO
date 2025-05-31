@@ -71,6 +71,8 @@ class BaseTrainer:
             overrides (dict, optional): Configuration overrides. Defaults to None.
         """
         self.args = get_cfg(cfg, overrides)
+        # 加暗的参数
+        self.dark_param = self.args.dark_param
         self.device = select_device(self.args.device, self.args.batch)
         self.check_resume()
         self.validator = None

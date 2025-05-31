@@ -32,7 +32,8 @@ def train_lowght():
     model.train(data="tielu.yaml", epochs=5, imgsz=640)
 
 
-def onnx(path: Union[str, Path] = "/home/youtian/Documents/pro/pyCode/easy_YOLOv8/yolov8l.pt"):
+
+def onnx(path: Union[str, Path] = "/home/youtian/Documents/pro/pyCode/Dedark-YOLO/epoch20.pt"):
     # you need numpy==1.24.3 ,otherwise it will report Error
     onnxpath = Path(path).with_suffix(".onnx")
     print(onnxpath)
@@ -47,8 +48,9 @@ def onnx(path: Union[str, Path] = "/home/youtian/Documents/pro/pyCode/easy_YOLOv
 
 
 def test_img():
-    model = YOLO("/home/youtian/Documents/pro/pyCode/easy_YOLOv8/runs/detect/RFB+ASFF/weights/best.pt")
-    img = cv2.imread("/home/youtian/Documents/pro/pyCode/easy_YOLOv8/images/16182.jpg")
+    model = YOLO("/home/youtian/Documents/pro/pyCode/Dedark-YOLO/epoch20.pt")
+    img = cv2.imread("/home/youtian/Documents/pro/pyCode/datasets/darkpic/192.168.39.20_20240726_195724_1337826_2.jpg")
+    # img = cv2.imread("/home/youtian/Documents/pro/pyCode/datasets/tielu-yolo/images/train/192.168.39.20_20240726_195724_1337826_2.jpg")
     res = model(img)
     ann = res[0].plot()
     while True:
@@ -187,5 +189,6 @@ def predict():
 
 if __name__ == "__main__":
     train_lowght()
-
+    # test_img()
+    # onnx()
 

@@ -86,10 +86,7 @@ class BaseModel(nn.Module):
             if profile:
                 self._profile_one_layer(m, x, dt)
             # 这里为了让的训练前的验证阶段的通过,设计了一个针对模块的判断
-            if isinstance(m, lowlight_recovery):
-                x, rloss = m(x)
-            else:
-                x = m(x)   # run
+            x = m(x)   # run
             # 判断是不是P特征
             y.append(x if m.i in self.save else None)  # save output
             if visualize:
@@ -250,9 +247,9 @@ class DetectionModel(BaseModel):
         # model, savelist
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)
         #  添加低光模块的索引
-        for i, m in enumerate(self.model):
-            if isinstance(m, lowlight_recovery):
-                self.lowlight_recovery_idx = i
+        # for i, m in enumerate(self.model):
+        #     if isinstance(m, lowlight_recovery):
+        #         self.lowlight_recovery_idx = i
 
         # name = {0:'0', 1:'1',...
         self.names = {i: f'{i}' for i in range(self.yaml['nc'])}  # default names dict
@@ -282,51 +279,51 @@ class DetectionModel(BaseModel):
             LOGGER.info('')
 
     # 这里重写了Basemodel的forward方法,如果将其删掉,就是原版的代码
-    def forward(self, x, *args, **kwargs):
-        """
-        Forward pass of the model, handling both training/validation and inference.
-
-        Args:
-            x (torch.Tensor | dict): Input tensor [batch_size, 3, h, w] or dict with 'img', 'cls', etc.
-            gt_images (torch.Tensor, optional): Ground truth enhanced images [batch_size, 3, h, w].
-            profile (bool): Profile layer performance if True.
-            visualize (bool): Visualize feature maps if True.
-
-        Returns:
-            torch.Tensor or tuple: Predictions (inference) or (predictions, losses, restored_img) (training/validation).
-        """
-        if isinstance(x, dict):  # Training or validation mode
-            y, dt = [], []  # Outputs and profiling times
-            batch = x
-            x = batch['img']  # Extract input tensor [batch_size, 3, h, w]
-
-            for i, m in enumerate(self.model):
-                # Determine input based on 'from' index
-                if m.f != -1:  # If not from previous layer
-                    x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
-
-                # Handle lowlight_recovery module
-                if i == self.lowlight_recovery_idx and self.lowlight_recovery_idx is not None:
-                    x, recovery_loss = m(x)
-                    if recovery_loss is not None:
-                        batch['recovery_loss'] = recovery_loss
-                        # LOGGER.info(f"Stored recovery_loss: {recovery_loss.item():.4f}")
-                else:
-                    x = m(x)  # Run standard module
-                #
-                # if profile:
-                #     self._profile_one_layer(m, x, dt)
-                y.append(x if m.i in self.save else None)  # Save output
-                # if visualize:
-                #     feature_visualization(x, m.type, m.i, save_dir=visualize)
-
-            # Compute loss
-            loss_output = self.loss(batch, x)
-            return loss_output
-
-        # Inference mode
-        # return self._predict_once(x, profile=profile, visualize=visualize)
-        return self.predict(x, *args, **kwargs)
+    # def forward(self, x, *args, **kwargs):
+    #     """
+    #     Forward pass of the model, handling both training/validation and inference.
+    #
+    #     Args:
+    #         x (torch.Tensor | dict): Input tensor [batch_size, 3, h, w] or dict with 'img', 'cls', etc.
+    #         gt_images (torch.Tensor, optional): Ground truth enhanced images [batch_size, 3, h, w].
+    #         profile (bool): Profile layer performance if True.
+    #         visualize (bool): Visualize feature maps if True.
+    #
+    #     Returns:
+    #         torch.Tensor or tuple: Predictions (inference) or (predictions, losses, restored_img) (training/validation).
+    #     """
+    #     if isinstance(x, dict):  # Training or validation mode
+    #         y, dt = [], []  # Outputs and profiling times
+    #         batch = x
+    #         x = batch['img']  # Extract input tensor [batch_size, 3, h, w]
+    #
+    #         for i, m in enumerate(self.model):
+    #             # Determine input based on 'from' index
+    #             if m.f != -1:  # If not from previous layer
+    #                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
+    #
+    #             # Handle lowlight_recovery module
+    #             if i == self.lowlight_recovery_idx and self.lowlight_recovery_idx is not None:
+    #                 x, recovery_loss = m(x)
+    #                 if recovery_loss is not None:
+    #                     batch['recovery_loss'] = recovery_loss
+    #                     # LOGGER.info(f"Stored recovery_loss: {recovery_loss.item():.4f}")
+    #             else:
+    #                 x = m(x)  # Run standard module
+    #             #
+    #             # if profile:
+    #             #     self._profile_one_layer(m, x, dt)
+    #             y.append(x if m.i in self.save else None)  # Save output
+    #             # if visualize:
+    #             #     feature_visualization(x, m.type, m.i, save_dir=visualize)
+    #
+    #         # Compute loss
+    #         loss_output = self.loss(batch, x)
+    #         return loss_output
+    #
+    #     # Inference mode
+    #     # return self._predict_once(x, profile=profile, visualize=visualize)
+    #     return self.predict(x, *args, **kwargs)
 
     def _predict_augment(self, x):
         """Perform augmentations on input image x and return augmented inference and train outputs."""

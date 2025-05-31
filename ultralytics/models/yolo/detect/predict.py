@@ -44,4 +44,4 @@ def predict(cfg=DEFAULT_CFG, use_python=False):
 
 
 if __name__ == '__main__':
-    predict()
+    predict(use_python=True)
