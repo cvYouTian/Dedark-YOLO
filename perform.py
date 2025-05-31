@@ -48,7 +48,7 @@ def onnx(path: Union[str, Path] = "/home/youtian/Documents/pro/pyCode/Dedark-YOL
 
 
 def test_img():
-    model = YOLO("/home/youtian/Documents/pro/pyCode/Dedark-YOLO/epoch20.pt")
+    model = YOLO("/home/youtian/Documents/pro/pyCode/ultralytics-YOLOv8/runs/detect/train6/weights/best.pt")
     img = cv2.imread("/home/youtian/Documents/pro/pyCode/datasets/darkpic/192.168.39.20_20240726_195724_1337826_2.jpg")
     # img = cv2.imread("/home/youtian/Documents/pro/pyCode/datasets/tielu-yolo/images/train/192.168.39.20_20240726_195724_1337826_2.jpg")
     res = model(img)
@@ -188,7 +188,7 @@ def predict():
 
 
 if __name__ == "__main__":
-    train_lowght()
-    # test_img()
+    # train_lowght()
+    test_img()
     # onnx()
 

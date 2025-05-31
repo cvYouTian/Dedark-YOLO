@@ -85,7 +85,6 @@ class BaseModel(nn.Module):
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
             if profile:
                 self._profile_one_layer(m, x, dt)
-            # 这里为了让的训练前的验证阶段的通过,设计了一个针对模块的判断
             x = m(x)   # run
             # 判断是不是P特征
             y.append(x if m.i in self.save else None)  # save output

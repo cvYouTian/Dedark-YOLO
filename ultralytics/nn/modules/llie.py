@@ -1,9 +1,5 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import random
-import cv2
 import os
 from .config_lowlight import cfg
 from .common import ExtractParameters2

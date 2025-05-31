@@ -30,10 +30,8 @@ class DetectionPredictor(BasePredictor):
 
 def predict(cfg=DEFAULT_CFG, use_python=False):
     """Runs YOLO model inference on input image(s)."""
-    model = cfg.model or 'yolov8n.pt'
-    source = cfg.source if cfg.source is not None else ROOT / 'assets' if (ROOT / 'assets').exists() \
-        else 'https://ultralytics.com/images/bus.jpg'
-
+    model = cfg.model or '/home/youtian/Documents/pro/pyCode/ultralytics-YOLOv8/runs/detect/train6/weights/best.pt'
+    source = "/home/youtian/Documents/pro/pyCode/datasets/darkpic/192.168.39.20_20240726_195724_1337826_2.jpg"
     args = dict(model=model, source=source)
     if use_python:
         from ultralytics import YOLO
