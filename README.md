@@ -4,7 +4,7 @@ Dedark-YOLO 是 YOLOv8 的增强版本，旨在提升低光照条件下的目标
 
 ## 功能
 
-- **低光照增强**：集成了 `lowlight_recovery` 模块，在检测前增强低光照图像。
+- **低光照增强**：集成了 `lowlight_recovery` 模块，在检测前增强低光照图像-。
 - **自定义损失函数**：在 `RcoveryDetectionLoss` 中将 `recovery_loss` 添加到分类损失（`cls_loss`），保持 `loss_items` 形状为 `[3]`。
 - **数据转换**：支持将 Pascal VOC 的 XML 标注文件转换为 YOLO 的 `.txt` 格式。
 - **低光照图像生成**：包含 `lowlight_maker` 用于生成低光照图像，`lowlight_process` 用于保存处理后的图像。
