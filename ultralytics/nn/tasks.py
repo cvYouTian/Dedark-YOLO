@@ -45,7 +45,7 @@ class BaseModel(nn.Module):
         # 训练和验证阶段
         if isinstance(x, dict):  # for cases of training and validating while training.
             return self.loss(x, *args, **kwargs)
-        # 测试阶段
+        # 测试阶段.使用predict.py时运行
         return self.predict(x, *args, **kwargs)
 
     def predict(self, x, profile=False, visualize=False, augment=False):
@@ -61,6 +61,7 @@ class BaseModel(nn.Module):
         Returns:
             (torch.Tensor): The last output of the model.
         """
+        # 可在defualt中设置是否使用aug
         if augment:
             return self._predict_augment(x)
         return self._predict_once(x, profile, visualize)
@@ -79,18 +80,25 @@ class BaseModel(nn.Module):
         """
         # y列表是保存P特征图
         y, dt = [], []  # outputs
+        # 经过lowlight_recovery恢复之后的图片
+        filtered_imgs = None
         for m in self.model:
             # it is Concat operation if m.f not is -1
             if m.f != -1:  # if not from previous layer
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
             if profile:
                 self._profile_one_layer(m, x, dt)
+            if isinstance(m, lowlight_recovery) and (self.training is False):
+                filtered_imgs = m(x)
+            #
             x = m(x)   # run
-            # 判断是不是P特征
             y.append(x if m.i in self.save else None)  # save output
             if visualize:
                 feature_visualization(x, m.type, m.i, save_dir=visualize)
-        return x
+            if filtered_imgs is None:
+                filtered_imgs = x
+
+        return x, filtered_imgs
 
     def _predict_augment(self, x):
         """Perform augmentations on input image x and return augmented inference."""
@@ -365,8 +373,8 @@ class DetectionModel(BaseModel):
     def init_criterion(self):
         return RcoveryDetectionLoss(self)
         # return v8DetectionLoss(self)
-
-
+#
+#
 class LowLightDetectionModel(DetectionModel):
     """Custom YOLOv8 detection model supporting lowlight_recovery module with restoration loss."""
     def __init__(self, cfg='yolov8n.yaml', ch=3, nc=None, verbose=True):

@@ -48,9 +48,9 @@ def onnx(path: Union[str, Path] = "/home/youtian/Documents/pro/pyCode/Dedark-YOL
 
 
 def test_img():
-    model = YOLO("/home/youtian/Documents/pro/pyCode/ultralytics-YOLOv8/runs/detect/train6/weights/best.pt")
-    img = cv2.imread("/home/youtian/Documents/pro/pyCode/datasets/darkpic/192.168.39.20_20240726_195724_1337826_2.jpg")
-    # img = cv2.imread("/home/youtian/Documents/pro/pyCode/datasets/tielu-yolo/images/train/192.168.39.20_20240726_195724_1337826_2.jpg")
+    model = YOLO("/home/youtian/Documents/pro/pyCode/Dedark-YOLO/runs/detect/6-1-1833/no-re_loss.pt")
+    img = cv2.imread("/home/youtian/Documents/pro/pyCode/datasets/darkpic_test/192.168.39.20_20240727_060304_2246886_2.jpg")
+    # img = cv2.imread("/home/youtian/Documents/pro/pyCode/datasets/tielu-yolo/images/test/192.168.39.20_20240727_060304_2246886_2.jpg")
     res = model(img)
     ann = res[0].plot()
     while True:

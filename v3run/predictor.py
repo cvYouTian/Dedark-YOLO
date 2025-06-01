@@ -1,3 +1,4 @@
+from pathlib import Path
 import cv2
 import os
 import shutil
@@ -63,6 +64,7 @@ class YoloTest(object):
         # 这里在使用的时候也需要使用清晰图像吗？
         pred_sbbox, pred_mbbox, pred_lbbox, image_isped, isp_param = self.model(lowlight_data, image_data)
 
+
         pred_bbox = np.concatenate([np.reshape(pred_sbbox.detach().cpu().numpy(), (-1, 5 + self.num_classes)),
                                     np.reshape(pred_mbbox.detach().cpu().numpy(), (-1, 5 + self.num_classes)),
                                     np.reshape(pred_lbbox.detach().cpu().numpy(), (-1, 5 + self.num_classes))], axis=0)
@@ -76,6 +78,15 @@ class YoloTest(object):
         if self.isp_flag:
             # print('ISP params :  ', isp_param)
             image_isped = np.clip(image_isped[0].permute(1, 2, 0).detach().cpu().numpy() * 255, 0, 255)
+
+            # save_dir = Path('runs/detect/exp/filtered')
+            # save_dir.mkdir(parents=True, exist_ok=True)  # 创建目录
+            # save_path = save_dir / f'filtered_img{1}.jpg'
+            #
+            # # 保存图像
+            # cv2.imwrite(str(save_path), image_isped)
+            # print(f"Saved filtered image to {save_path}")
+
             image_isped = utils.image_unpreporcess(image_isped, [org_h, org_w])
         else:
             image_isped = np.clip(image, 0, 255)
@@ -85,6 +96,49 @@ class YoloTest(object):
             # cv2.imwrite(self.write_image_path + 'low'+ image_name, image_isped)
 
         return bboxes, image_isped
+
+
+    def evaluate_once(self,
+                      img_path="/home/youtian/Documents/pro/pyCode/datasets/darkpic_test/192.168.39.20_20240727_060304_2246886_2.jpg",
+                      save_dir="runs/detect/exp/filtered"):
+        """
+        评估单张图像
+        :param img_path: 图像路径，如果为None则使用默认路径
+        :param save_dir: 结果保存目录
+        """
+        # 确保保存目录存在
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        # 读取图像
+        if not os.path.exists(img_path):
+            print(f"错误：图像路径不存在 - {img_path}")
+            return None
+
+        img = cv2.imread(img_path)
+        if img is None:
+            print(f"错误：无法读取图像 - {img_path}")
+            return None
+
+        # 进行预测
+        bboxes_pr, image_isped = self.predict(img)
+
+        # 绘制边界框
+        image = utils.draw_bbox(
+            image_isped,
+            bboxes_pr,
+            self.classes,
+            show_label=self.show_label
+        )
+
+        # 生成唯一文件名
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        save_path = save_dir / f"filtered_img_{timestamp}.jpg"
+
+        # 保存结果
+        cv2.imwrite(str(save_path), image)
+        print(f"结果已保存至: {save_path}")
+        return save_path
 
     def evaluate(self):
         mAP_path = exp_folder + '/mAP'
@@ -159,5 +213,9 @@ class YoloTest(object):
                         print('\t' + str(bbox_mess).strip())
 
 
+
+
+
 if __name__ == '__main__':
-    YoloTest().evaluate()
+    # YoloTest().evaluate()
+    YoloTest().evaluate_once()

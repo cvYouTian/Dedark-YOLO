@@ -22,7 +22,7 @@ parser.add_argument('--class_name', dest='class_name', nargs='*', default='./dat
 parser.add_argument('--WRITE_IMAGE_PATH', dest='WRITE_IMAGE_PATH', nargs='*',
                     default='./experiments_lowlight/exp_58/detection_vocnorm_test/', help='folder of the training data')
 parser.add_argument('--WEIGHT_FILE', dest='WEIGHT_FILE', nargs='*',
-                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/darkdet/experiments_lowlight/exp_02/checkpoint/best_model.pth',
+                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/v3run/experiments_lowlight/exp_02/checkpoint/best_model.pth',
                     help='folder of the training data')
 parser.add_argument('--pre_train', dest='pre_train',
                     default='NULL',
@@ -107,7 +107,7 @@ __C.YOLO.ISP_FLAG = args.ISP_FLAG
 __C.TRAIN = edict()
 
 __C.TRAIN.ANNOT_PATH = args.train_path
-__C.TRAIN.BATCH_SIZE = 4
+__C.TRAIN.BATCH_SIZE = 2
 __C.TRAIN.INPUT_SIZE = [608]
 __C.TRAIN.DATA_AUG = True
 __C.TRAIN.LEARN_RATE_INIT = 1e-4

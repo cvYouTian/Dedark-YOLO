@@ -701,7 +701,6 @@ class Conv3_SC_Bottleneck(nn.Module):
 
 
 class RFBblock(nn.Module):
-    # def __init__(self, in_ch, residual=False):
     def __init__(self, in_ch):
         super(RFBblock, self).__init__()
         inter_c = in_ch // 4

@@ -133,6 +133,7 @@ class BasePredictor:
         if not_tensor:
             img /= 255  # 0 - 255 to 0.0 - 1.0
         return img
+
     @staticmethod
     def feature_visualization(x, module_type, stage, n=32, save_dir=Path('runs/detect/exp')):
         """
@@ -164,7 +165,9 @@ class BasePredictor:
     def inference(self, im, *args, **kwargs):
         visualize = increment_path(self.save_dir / Path(self.batch[0][0]).stem,
                                    mkdir=True) if self.args.visualize and (not self.source_type.tensor) else False
-        return self.model(im, augment=self.args.augment, visualize=visualize)
+        preds, filtered_imgs = self.model(im, augment=self.args.augment, visualize=visualize)
+
+        return preds, filtered_imgs
 
     def pre_transform(self, im):
         """Pre-transform input image before inference.
@@ -212,7 +215,7 @@ class BasePredictor:
 
         return log_string
 
-    def postprocess(self, preds, img, orig_imgs):
+    def postprocess(self, preds, img, orig_imgs, filtered_imgs=None):
         """Post-processes predictions for an image and returns them."""
         return preds
 
@@ -279,11 +282,11 @@ class BasePredictor:
 
             # Inference
             with profilers[1]:
-                preds = self.inference(im, *args, **kwargs)
+                preds, filtered_imgs = self.inference(im, *args, **kwargs)
 
             # Postprocess
             with profilers[2]:
-                self.results = self.postprocess(preds, im, im0s)
+                self.results = self.postprocess(preds, im, im0s, filtered_imgs)
             self.run_callbacks('on_predict_postprocess_end')
 
             # Visualize, save, write results

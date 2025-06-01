@@ -99,7 +99,7 @@ class YoloTrain:
                 images, labels_sbbox, labels_mbbox, labels_lbbox, \
                     true_sbboxes, true_mbboxes, true_lbboxes = train_data
 
-                lowlight_param = 1
+                lowlight_param = 7.5
                 if args.lowlight_FLAG:
                     if random.randint(0, 2) > 0:
                         lowlight_param = random.uniform(6, 8)
@@ -128,6 +128,7 @@ class YoloTrain:
                 input_data_clean = input_data_clean.permute(0, 3, 1, 2)
                 # todo 检查model中是否有错误的转置
                 self.model(input_data, input_data_clean)
+                # 这里没有使用recovery loss
                 giou_loss, conf_loss, prob_loss, recovery_loss = self.model.compute_loss(labels_sbbox, labels_mbbox,
                                                                                          labels_lbbox, true_sbboxes,
                                                                                          true_mbboxes, true_lbboxes)

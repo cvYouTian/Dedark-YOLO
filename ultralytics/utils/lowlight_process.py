@@ -72,8 +72,8 @@ def apply_lowlight_and_save(input_dir, output_dir, lowlight_param=7.5, batch_siz
 
 if __name__ == "__main__":
     # 示例用法
-    input_dir = "/home/youtian/Documents/pro/pyCode/datasets/tielu-yolo/images/train"  # 输入图像目录
-    output_dir = "/home/youtian/Documents/pro/pyCode/datasets/darkpic"  # 输出图像目录
+    input_dir = "/home/youtian/Documents/pro/pyCode/datasets/tielu-yolo/images/test"  # 输入图像目录
+    output_dir = "/home/youtian/Documents/pro/pyCode/datasets/darkpic_test"  # 输出图像目录
     lowlight_param = 7.5  # 低光参数
     batch_size = 16  # 批量大小
 

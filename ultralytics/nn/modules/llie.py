@@ -29,6 +29,7 @@ class lowlight_recovery(nn.Module):
 
         # Apply filters
         filtered_image = input_data.clone()
+
         for filter in self.filters:
             filtered_image, _ = filter(filtered_image, filter_features)
 
