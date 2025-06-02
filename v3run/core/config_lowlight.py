@@ -11,7 +11,7 @@ parser.add_argument('--checkpoint_dir', dest='ckpt_dir', default='checkpoint', h
 parser.add_argument('--exp_dir', dest='exp_dir', default='./experiments_lowlight', help='models are saved here')
 parser.add_argument('--gpu_id', dest='gpu_id', type=str, default='0', help='if use gpu, use gpu device id')
 parser.add_argument('--ISP_FLAG', dest='ISP_FLAG', type=bool, default=True, help='whether use isp')
-parser.add_argument('--lowlight_FLAG', dest='lowlight_FLAG', type=bool, default=False,
+parser.add_argument('--lowlight_FLAG', dest='lowlight_FLAG', type=bool, default=True,
                     help='whether use Hybrid data training')
 parser.add_argument('--train_path', dest='train_path', nargs='*', default='./data/dataset_dark/tielu1386_train.txt',
                     help='folder of the training data')
@@ -22,7 +22,7 @@ parser.add_argument('--class_name', dest='class_name', nargs='*', default='./dat
 parser.add_argument('--WRITE_IMAGE_PATH', dest='WRITE_IMAGE_PATH', nargs='*',
                     default='./experiments_lowlight/exp_58/detection_vocnorm_test/', help='folder of the training data')
 parser.add_argument('--WEIGHT_FILE', dest='WEIGHT_FILE', nargs='*',
-                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/v3run/experiments_lowlight/exp_02/checkpoint/best_model.pth',
+                    default='/home/youtian/Documents/pro/pyCode/Dedark-YOLO/v3run/runs/detect/6-2-0221/best_model.pth',
                     help='folder of the training data')
 parser.add_argument('--pre_train', dest='pre_train',
                     default='NULL',

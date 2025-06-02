@@ -69,8 +69,6 @@ class Filter(nn.Module):
         else:
             debug_info['filter_parameters'] = filter_parameters[0]
 
-        # 训练的时候实时打印滤波器参数
-        # print("wxl:feashape",filter_parameters.shape)
 
         low_res_output = self.process(img, filter_parameters)
         if high_res is not None:

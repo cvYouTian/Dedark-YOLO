@@ -32,7 +32,6 @@ def train_lowght():
     model.train(data="tielu.yaml", epochs=5, imgsz=640)
 
 
-
 def onnx(path: Union[str, Path] = "/home/youtian/Documents/pro/pyCode/Dedark-YOLO/epoch20.pt"):
     # you need numpy==1.24.3 ,otherwise it will report Error
     onnxpath = Path(path).with_suffix(".onnx")
@@ -188,7 +187,7 @@ def predict():
 
 
 if __name__ == "__main__":
-    # train_lowght()
-    test_img()
+    train_lowght()
+    # test_img()
     # onnx()
 

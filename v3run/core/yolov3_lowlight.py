@@ -110,6 +110,7 @@ class YOLOV3(nn.Module):
         # 只有这个恢复损失使用了这个干净的图像
         self.recovery_loss = torch.sum((filtered_image_batch - input_data_clean) ** 2)
         # TODO：这里要使用滤波之后的图像作为检测器的输入
+
         route_1, route_2, input_data = self.darknet53(filtered_image_batch)
 
         input_data = self.conv_lbbox_model(input_data)

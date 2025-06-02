@@ -8,8 +8,10 @@ import core.utils as utils
 from core.dataset_lowlight import Dataset
 from core.yolov3_lowlight import YOLOV3
 from core.config_lowlight import cfg
+from pathlib import Path
 from core.config_lowlight import args
 import random
+import cv2
 
 
 torch.autograd.set_detect_anomaly(True)
@@ -99,15 +101,24 @@ class YoloTrain:
                 images, labels_sbbox, labels_mbbox, labels_lbbox, \
                     true_sbboxes, true_mbboxes, true_lbboxes = train_data
 
-                lowlight_param = 7.5
+                lowlight_param = 1
                 if args.lowlight_FLAG:
-                    if random.randint(0, 2) > 0:
-                        lowlight_param = random.uniform(6, 8)
+                    lowlight_param = 7.5
+                    # if random.randint(0, 2) > 0:
+                    #     lowlight_param = random.uniform(6, 8)
                 else:
                     input_data = images
 
                 input_data = np.power(images, lowlight_param)
                 input_data_clean = images
+
+                # save_dir = Path('runs/detect/exp/filtered')
+                # save_dir.mkdir(parents=True, exist_ok=True)  # 创建目录
+                # save_path = save_dir / f'filtered_img{6}.jpg'
+                #
+                # # 保存图像
+                # cv2.imwrite(str(save_path), input_data_clean)
+                # print(f"Saved filtered image to {save_path}")
 
 
                 input_data = torch.from_numpy(input_data).to(device).to(torch.float32)
@@ -132,7 +143,7 @@ class YoloTrain:
                 giou_loss, conf_loss, prob_loss, recovery_loss = self.model.compute_loss(labels_sbbox, labels_mbbox,
                                                                                          labels_lbbox, true_sbboxes,
                                                                                          true_mbboxes, true_lbboxes)
-                loss = giou_loss + conf_loss + prob_loss
+                loss = giou_loss + conf_loss + prob_loss + recovery_loss
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -159,9 +170,9 @@ class YoloTrain:
                         true_sbboxes, true_mbboxes, true_lbboxes = test_data
 
                     if args.lowlight_FLAG:
-                        lowlight_param = 1
-                        if random.randint(0, 2) > 0:
-                            lowlight_param = random.uniform(1.5, 5)
+                        lowlight_param = 7.5
+                        # if random.randint(0, 2) > 0:
+                        #     lowlight_param = random.uniform(1.5, 5)
                         input_data = np.power(images, lowlight_param)
                     else:
                         input_data = images
@@ -184,7 +195,7 @@ class YoloTrain:
                     giou_loss, conf_loss, prob_loss, recovery_loss = self.model.compute_loss(
                         labels_sbbox, labels_mbbox, labels_lbbox, true_sbboxes, true_mbboxes, true_lbboxes
                     )
-                    loss = giou_loss + conf_loss + prob_loss
+                    loss = giou_loss + conf_loss + prob_loss + recovery_loss
 
                     test_epoch_loss.append(loss.item())
                     pbar.set_description(f"Eval loss: {loss.item():.2f}")

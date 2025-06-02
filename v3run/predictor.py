@@ -79,21 +79,9 @@ class YoloTest(object):
             # print('ISP params :  ', isp_param)
             image_isped = np.clip(image_isped[0].permute(1, 2, 0).detach().cpu().numpy() * 255, 0, 255)
 
-            # save_dir = Path('runs/detect/exp/filtered')
-            # save_dir.mkdir(parents=True, exist_ok=True)  # 创建目录
-            # save_path = save_dir / f'filtered_img{1}.jpg'
-            #
-            # # 保存图像
-            # cv2.imwrite(str(save_path), image_isped)
-            # print(f"Saved filtered image to {save_path}")
-
             image_isped = utils.image_unpreporcess(image_isped, [org_h, org_w])
         else:
             image_isped = np.clip(image, 0, 255)
-
-            # 保留中间的图片
-            # image_isped = utils.image_unpreporcess(image_isped, [org_h, org_w])
-            # cv2.imwrite(self.write_image_path + 'low'+ image_name, image_isped)
 
         return bboxes, image_isped
 
