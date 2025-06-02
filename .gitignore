@@ -24,6 +24,7 @@ lib64/
 parts/
 sdist/
 var/
+*.json
 *.onnx
 wheels/
 share/python-wheels/
