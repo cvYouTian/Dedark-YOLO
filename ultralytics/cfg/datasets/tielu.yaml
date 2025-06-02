@@ -6,3 +6,5 @@ test:  # test images (optional)
 # Classes
 names:
   0: person
+  1: debrisflow
+  2: rockfall
