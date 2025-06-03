@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import os
-from .config_lowlight import cfg
+from .filter_cfg import cfg
 from .common import ExtractParameters2
 
 

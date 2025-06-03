@@ -11,6 +11,7 @@ import math
 
 __all__ = ("Filter", "UsmFilter", "GammaFilter", "ImprovedWhiteBalanceFilter", "ContrastFilter", "ToneFilter")
 
+
 class Filter(nn.Module):
     def __init__(self,cfg):
         super().__init__()
@@ -98,7 +99,7 @@ class Filter(nn.Module):
     def get_mask(self, img, mask_parameters):
         if not self.use_masking():
             print('* Masking Disabled')
-            return torch.ones(shape=(1, 1, 1, 1), dtype=torch.float32)
+            return torch.ones((1, 1, 1, 1), dtype=torch.float32)
         else:
             print('* Masking Enabled')
         with self.name_scope('mask'):
@@ -109,13 +110,14 @@ class Filter(nn.Module):
                 initial=0)(mask_parameters)
 
             size = list(map(int, img.shape[1:3]))
-            grid = torch.zeros(shape=[1] + size + [2], dtype=torch.float32)
+            grid = torch.zeros([1] + size + [2], dtype=torch.float32)
 
             shorter_edge = min(size[0], size[1])
             for i in range(size[0]):
                 for j in range(size[1]):
                     grid[0, i, j, 0] = (i + (shorter_edge - size[0]) / 2.0) / shorter_edge - 0.5
                     grid[0, i, j, 1] = (j + (shorter_edge - size[1]) / 2.0) / shorter_edge - 0.5
+
             inp = \
                 mask_parameters[:, None, None, 0, None] * grid[:, :, :, 0, None] + \
                 mask_parameters[:, None, None, 1, None] * grid[:, :, :, 1, None] + \
@@ -251,7 +253,6 @@ class ToneFilter(Filter):
         total_image *= self.cfg.curve_steps / tone_curve_sum
         img = total_image
         return img
-
 
 
 class ContrastFilter(Filter):

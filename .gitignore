@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+filtered_images
 checkpoints/
 # C extensions
 *.so

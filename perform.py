@@ -7,7 +7,7 @@ from typing import Union
 import cv2
 import netron
 import time
-from ultralytics import YOLO, RTDETR
+from ultralytics import YOLO
 os.environ["WANDB_MODE"] = "offline"  # 离线模式
 
 def train():
@@ -102,8 +102,8 @@ def test_folders(model_path: str = "/home/youtian/Documents/pro/pyCode/easy_YOLO
     # 加载权重model
     if not isinstance(model_path, Path):
         model_path = Path(model_path)
-    if mothed.lower() == "rtdetr":
-        model = RTDETR(str(model_path))
+    # if mothed.lower() == "rtdetr":
+    #     model = RTDETR(str(model_path))
     else:
         model = YOLO(model_path)
 

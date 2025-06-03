@@ -20,7 +20,7 @@ from .block import (C1, C2, C3, C3TR, DFL, SPP, SPPF, Bottleneck, BottleneckCSP,
                     AsffTribeLevel, RFBblock, MFRU)
 from .llie import lowlight_recovery
 from .common import ExtractParameters2
-from .config_lowlight import (UsmFilter, GammaFilter, ImprovedWhiteBalanceFilter, ContrastFilter, ToneFilter)
+from .filter_cfg import (UsmFilter, GammaFilter, ImprovedWhiteBalanceFilter, ContrastFilter, ToneFilter)
 from .conv import (CBAM, ChannelAttention, Concat, Conv, Conv2, ConvTranspose, DWConv, DWConvTranspose2d, Focus,
                    GhostConv, LightConv, RepConv, SpatialAttention, PConv, SCConv, FC)
 
