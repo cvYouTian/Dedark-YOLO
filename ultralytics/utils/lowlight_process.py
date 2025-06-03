@@ -88,8 +88,8 @@ def apply_lowlight_and_save(input_dir, output_dir, lowlight_param=7.5, batch_siz
 
 if __name__ == "__main__":
     # 示例用法
-    input_dir = "/home/ncst/YOU/pro/Dedark-YOLO/tielu-yolo/images/test"  # 输入图像目录
-    output_dir = "/home/ncst/YOU/pro/Dedark-YOLO/tielu-yolo/images/test_dark"  # 输出图像目录
+    input_dir = "/tielu-yolo/images/test"  # 输入图像目录
+    output_dir = "tielu-yolo/images/test_dark"  # 输出图像目录
     lowlight_param = 5.0  # 低光参数
     batch_size = 16  # 批量大小
 

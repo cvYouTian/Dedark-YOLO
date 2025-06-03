@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import numpy as np
 import torch
+import torch.nn.functional as F
 from ultralytics.data import build_dataloader, build_yolo_dataset
 from ultralytics.engine.validator import BaseValidator
 from ultralytics.utils import DEFAULT_CFG, LOGGER, ops
@@ -34,7 +35,7 @@ class DetectionValidator(BaseValidator):
 
         batch["img"] = torch.pow(batch["clean_img"], self.dark_param)
 
-        recover_loss = torch.sum((batch["img"] - batch["clean_img"]) ** 2)
+        recover_loss = F.mse_loss(batch["img"], batch["clean_img"])
         batch["recovery_loss_batch"] = recover_loss
 
         for k in ['batch_idx', 'cls', 'bboxes']:

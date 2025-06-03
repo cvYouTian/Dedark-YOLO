@@ -8,7 +8,7 @@ import cv2
 import netron
 import time
 from ultralytics import YOLO, RTDETR
-
+os.environ["WANDB_MODE"] = "offline"  # 离线模式
 
 def train():
     # Load a model
