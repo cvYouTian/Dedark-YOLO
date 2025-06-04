@@ -53,11 +53,14 @@ cfg.bnw = False
 cfg.feature_extractor_dims = 4096
 
 
+DD = DeDarkFilter(cfg)
 WB = ImprovedWhiteBalanceFilter(cfg)
 GF = GammaFilter(cfg)
 TF = ToneFilter(cfg)
 CF = ContrastFilter(cfg)
 S = UsmFilter(cfg)
 
-cfg.filters = [WB, GF, TF, CF, S]
+# no dedark
+# cfg.filters = [WB, GF, TF, CF, S]
 
+cfg.filters = [DD, WB, GF, TF, CF, S]
