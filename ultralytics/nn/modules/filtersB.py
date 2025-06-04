@@ -251,7 +251,6 @@ class ImprovedWhiteBalanceFilter(Filter):
         return img * param[:, :, None, None]
 
 
-
 class ToneFilter(Filter):
     def __init__(self,cfg):
         super().__init__(cfg)
