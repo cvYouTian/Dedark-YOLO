@@ -30,6 +30,11 @@ class BaseModel(nn.Module):
     """
     The BaseModel class serves as a base class for all the models in the Ultralytics YOLO family.
     """
+    def __init__(self):
+        super().__init__()
+
+        self.current_dedark_A = None
+        self.current_IcA = None
 
     def forward(self, x, *args, **kwargs):
         """
@@ -42,8 +47,8 @@ class BaseModel(nn.Module):
         Returns:
             (torch.Tensor): The output of the network.
         """
-        # 训练和验证阶段
-        if isinstance(x, dict):  # for cases of training and validating while training.
+
+        if isinstance(x, dict):
             return self.loss(x, *args, **kwargs)
         # 测试阶段.使用predict.py时运行
         return self.predict(x, *args, **kwargs)
@@ -78,6 +83,17 @@ class BaseModel(nn.Module):
         Returns:
             (torch.Tensor): The last output of the model.
         """
+
+        if isinstance(x, dict):
+            img_data = x.get("img", x.get("clean_img",None))
+            self.current_dedark_A = x.get("dedark_A", None)
+            self.current_IcA = x.get("IcA", None)
+            x = img_data
+
+        else:
+            self.current_dedark_A = None
+            self.current_IcA = None
+
         # y列表是保存P特征图
         y, dt = [], []  # outputs
         # 经过lowlight_recovery恢复之后的图片
@@ -88,18 +104,20 @@ class BaseModel(nn.Module):
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
             if profile:
                 self._profile_one_layer(m, x, dt)
-            # if isinstance(m, lowlight_recovery) and (self.training is False):
-            #     filtered_imgs = m(x)
+            if isinstance(m, lowlight_recovery) and (self.training is False):
+                x = m(x, self.current_dedark_A, self.current_IcA)
+            else:
+                x = m(x)
+
             x = m(x)   # run
-            y.append(x if m.i in self.save else None)  # save output
+            y.append(x if m.i in self.save else None)
             if visualize:
                 feature_visualization(x, m.type, m.i, save_dir=visualize)
             if filtered_imgs is None:
                 filtered_imgs = x
 
-        # if self.training is False:
-        #     return x, filtered_imgs
         return x
+
 
     def _predict_augment(self, x):
         """Perform augmentations on input image x and return augmented inference."""
@@ -227,7 +245,9 @@ class BaseModel(nn.Module):
         if not hasattr(self, 'criterion'):
             self.criterion = self.init_criterion()
 
-        preds = self.forward(batch['img']) if preds is None else preds
+        # preds = self.forward(batch['img']) if preds is None else preds
+        preds = self._predict_once(batch) if preds is None else preds
+
         return self.criterion(preds, batch)
 
     def init_criterion(self):
@@ -292,7 +312,9 @@ class DetectionModel(BaseModel):
             yi = super().predict(xi)[0]  # forward
             # cv2.imwrite(f'img_{si}.jpg', 255 * xi[0].cpu().numpy().transpose((1, 2, 0))[:, :, ::-1])  # save
             yi = self._descale_pred(yi, fi, si, img_size)
+
             y.append(yi)
+
         y = self._clip_augmented(y)  # clip augmented tails
         return torch.cat(y, -1), None  # augmented inference, train
 

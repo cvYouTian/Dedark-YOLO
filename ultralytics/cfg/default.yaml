@@ -29,7 +29,10 @@ resume: False  # (bool) resume training from last checkpoint
 amp: False  # (bool) Automatic Mixed Precision (AMP) training, choices=[True, False], True runs AMP check
 fraction: 1.0  # (float) dataset fraction to train on (default is 1.0, all images in train set)
 profile: False  # (bool) profile ONNX and TensorRT speeds during training for loggers
+lowlight_FLAG: False # use Lowlight process
 dark_param: 15.0 # 给原图添加暗处理的参数值,次方级
+dedark_FLAG: True # use Dedark module
+
 
 # Segmentation
 overlap_mask: True  # (bool) masks should overlap during training (segment train only)

@@ -50,7 +50,6 @@ class DetectionTrainer(BaseTrainer):
     #     return batch
     #
 
-
     def DarkChannel(self, im):
         b, g, r = cv2.split(im)
         dc = cv2.min(cv2.min(r, g), b)
@@ -83,7 +82,7 @@ class DetectionTrainer(BaseTrainer):
         """Preprocesses a batch of images by scaling and converting to float."""
         batch['clean_img'] = batch['img'].to(self.device, non_blocking=True).float() / 255
 
-        if hasattr(self.args, 'fog_FLAG') and self.args.fog_FLAG:
+        if hasattr(self.args, 'dedark_FLAG') and self.args.dedark_FLAG:
             batch_size = batch['clean_img'].shape[0]
             height = batch['clean_img'].shape[2]
             width = batch['clean_img'].shape[3]
@@ -97,27 +96,30 @@ class DetectionTrainer(BaseTrainer):
 
             # Process each image in batch
             for i in range(batch_size):
-                dark_i = self.DarkChannel(clean_imgs_np[i])
+                dark_i = self.DarkChannel(clean_imgs_np [i])
                 defog_A_i = self.AtmLight(clean_imgs_np[i], dark_i)
                 IcA_i = self.DarkIcA(clean_imgs_np[i], defog_A_i)
                 defog_A[i, ...] = defog_A_i
                 IcA[i, ...] = IcA_i
 
             # Convert back to PyTorch tensors
-            batch['defog_A'] = torch.from_numpy(defog_A).float().to(self.device)
+            batch['dedark_A'] = torch.from_numpy(defog_A).float().to(self.device)
             batch['IcA'] = torch.from_numpy(np.expand_dims(IcA, axis=-1)).permute(0, 3, 1, 2).float().to(self.device)
 
             # Use the processed image (same as clean_img in this case, following the original logic)
             batch["img"] = batch["clean_img"]
 
+        elif hasattr(self.args, "lowlight_FLAG") and self.args.lowlight_FLAG:
+            batch["img"] = torch.pow(batch["clean_img"], self.args.dark_param)
+
         else:
-            # Original processing when fog_FLAG is not set
-            batch["img"] = torch.pow(batch["clean_img"], self.dark_param)
+            batch["img"] = batch["clean_img"]
 
         recover_loss = F.mse_loss(batch["img"], batch["clean_img"])
         batch["recovery_loss_batch"] = recover_loss
 
         return batch
+
     def set_model_attributes(self):
         """nl = de_parallel(self.model).model[-1].nl  # number of detection layers (to scale hyps)."""
         # self.args.box *= 3 / nl  # scale to layers

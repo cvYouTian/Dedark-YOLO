@@ -27,6 +27,9 @@ Usage - formats:
                               yolov8n_edgetpu.tflite     # TensorFlow Edge TPU
                               yolov8n_paddle_model       # PaddlePaddle
 """
+import math
+
+import matplotlib.pyplot as plt
 import platform
 from pathlib import Path
 
@@ -130,6 +133,33 @@ class BasePredictor:
         if not_tensor:
             img /= 255  # 0 - 255 to 0.0 - 1.0
         return img
+    @staticmethod
+    def feature_visualization(x, module_type, stage, n=32, save_dir=Path('runs/detect/exp')):
+        """
+        x:              Features to be visualized
+        module_type:    Module type
+        stage:          Module stage within model
+        n:              Maximum number of feature maps to plot
+        save_dir:       Directory to save results
+        """
+        if 'Detect' not in module_type:
+            batch, channels, height, width = x.shape  # batch, channels, height, width
+            if height > 1 and width > 1:
+                f = save_dir / f"stage{stage}_{module_type.split('.')[-1]}_features.png"  # filename
+
+                blocks = torch.chunk(x[0].cpu(), channels, dim=0)  # select batch index 0, block by channels
+                n = min(n, channels)  # number of plots
+                fig, ax = plt.subplots(math.ceil(n / 8), 8, tight_layout=True)  # 8 rows x n/8 cols
+                ax = ax.ravel()
+                plt.subplots_adjust(wspace=0.05, hspace=0.05)
+                for i in range(n):
+                    ax[i].imshow(blocks[i].squeeze())  # cmap='gray'
+                    ax[i].axis('off')
+
+                # LOGGER.info(f'Saving {f}... ({n}/{channels})')
+                plt.savefig(f, dpi=300, bbox_inches='tight')
+                plt.close()
+                np.save(str(f.with_suffix('.npy')), x[0].cpu().numpy())  # npy save
 
     def inference(self, im, *args, **kwargs):
         visualize = increment_path(self.save_dir / Path(self.batch[0][0]).stem,
@@ -240,6 +270,7 @@ class BasePredictor:
         for batch in self.dataset:
             self.run_callbacks('on_predict_batch_start')
             self.batch = batch
+            # 将batch几个变量
             path, im0s, vid_cap, s = batch
 
             # Preprocess

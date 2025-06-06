@@ -1,6 +1,5 @@
 import torch.nn as nn
 import torch.nn.functional as F
-import os
 from .filter_cfg import cfg
 from .common import ExtractParameters2
 
@@ -13,11 +12,10 @@ class lowlight_recovery(nn.Module):
         super().__init__()
         self.extractor = ExtractParameters2(cfg)
         self.filters = nn.ModuleList(cfg.filters)
-        self.save_dir = "filtered_images"  # 保存目录
-        os.makedirs(self.save_dir, exist_ok=True)  # 创建目录
 
-    def forward(self, x):
+    def forward(self, x, dedark_A=None, IcA=None):
         # Ensure input is on the correct device
+
         self.to(x.device)
         input_data = x.clone()
 
@@ -31,6 +29,6 @@ class lowlight_recovery(nn.Module):
         filtered_image = input_data.clone()
 
         for filter in self.filters:
-            filtered_image, _ = filter(filtered_image, filter_features)
+            filtered_image, _ = filter(filtered_image, filter_features, dedark_A, IcA)
 
         return filtered_image

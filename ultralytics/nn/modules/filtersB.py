@@ -39,7 +39,7 @@ class Filter(nn.Module):
     def filter_param_regressor(self, features):
         assert False
 
-    def process(self, img, param, defog, IcA):
+    def process(self, img, param, dedark, IcA):
         assert False
 
     def debug_info_batched(self):
@@ -49,12 +49,8 @@ class Filter(nn.Module):
         return False
 
     # Apply the whole filter with masking
-    def forward(self,img,
-              img_features=None,
-              defog_A=None,
-              IcA=None,
-              specified_parameter=None,
-              high_res=None):
+    def forward(self, img, img_features=None, dedark_A=None, IcA=None, specified_parameter=None, high_res=None):
+
         assert (img_features is None) ^ (specified_parameter is None)
         if img_features is not None:
             filter_features, mask_parameters = self.extract_parameters(img_features)
@@ -72,19 +68,16 @@ class Filter(nn.Module):
         else:
             debug_info['filter_parameters'] = filter_parameters[0]
 
+        low_res_output = self.process(img, filter_parameters, dedark_A, IcA)
 
-        low_res_output = self.process(img, filter_parameters, defog_A, IcA)
         if high_res is not None:
             if self.no_high_res():
                 high_res_output = high_res
             else:
                 self.high_res_mask = self.get_mask(high_res, mask_parameters)
-                # high_res_output = lerp(high_res,
-                #                        self.process(high_res, filter_parameters, defog, IcA),
-                #                        self.high_res_mask)
         else:
             high_res_output = None
-        # return low_res_output, high_res_output, debug_info
+
         return low_res_output, filter_parameters
 
     def use_masking(self):
@@ -149,7 +142,7 @@ class Filter(nn.Module):
 
 
 class UsmFilter(Filter):
-    def __init__(self, net, cfg):
+    def __init__(self, cfg):
         super().__init__(cfg)
         self.short_name = 'UF'
         self.begin_filter_parameter = cfg.usm_begin_param
@@ -158,7 +151,7 @@ class UsmFilter(Filter):
     def filter_param_regressor(self, features):
         return tanh_range(*self.cfg.usm_range)(features)
 
-    def process(self, img, param, defog_A, IcA):
+    def process(self, img, param, dedark_A, IcA):
         def make_gaussian_2d_kernel(sigma, dtype=torch.float32):
             radius = 12
             x = torch.cast(-radius, radius + 1, dtype=dtype)
@@ -183,32 +176,32 @@ class UsmFilter(Filter):
 
 
 
-class DedarkFilter(Filter):
+class DeDarkFilter(Filter):
 
     def __init__(self, cfg):
         super().__init__(cfg)
         self.short_name = 'DF'
-        self.begin_filter_parameter = cfg.defog_begin_param
+        self.begin_filter_parameter = cfg.dedark_begin_param
         self.num_filter_parameters = 1
 
     def filter_param_regressor(self, features):
         return tanh_range(*self.cfg.defog_range)(features)
 
-    def process(self, img, param, defog_A, IcA):
+    def process(self, img, param, dedark_A=None, IcA=None):
         print('      defog_A:', img.shape)
         print('      defog_A:', IcA.shape)
-        print('      defog_A:', defog_A.shape)
+        print('      defog_A:', dedark_A.shape)
 
         tx = 1 - param[:, :, None, None] * IcA
         # tx = 1 - 0.5*IcA
 
         tx_1 = torch.tile(tx, [1, 1, 1, 3])
-        return (img - defog_A[:, :, None, None]) / torch.clamp(tx_1, min=0.01) + defog_A[:, :, None, None,]
+        return (img - dedark_A[:, :, None, None]) / torch.clamp(tx_1, min=0.01) + dedark_A[:, :, None, None,]
 
 
 class GammaFilter(Filter):  # gamma_param is in [-gamma_range, gamma_range]
 
-    def __init__(self, net, cfg):
+    def __init__(self, cfg):
         super().__init__(cfg)
         self.short_name = 'G'
         self.begin_filter_parameter = cfg.gamma_begin_param
@@ -218,14 +211,15 @@ class GammaFilter(Filter):  # gamma_param is in [-gamma_range, gamma_range]
         log_gamma_range = np.log(self.cfg.gamma_range)
         return torch.exp(tanh_range(-log_gamma_range, log_gamma_range)(features))
 
-    def process(self, img, param, defog_A, IcA):
+    def process(self, img, param, dedark_A, IcA):
         param_1 = param.repeat(1, 3)
         return torch.pow(torch.clamp(img, 0.0001), param_1[:, :, None, None])
         # return img
 
+
 class ImprovedWhiteBalanceFilter(Filter):
 
-    def __init__(self, net, cfg):
+    def __init__(self, cfg):
         super().__init__(cfg)
         self.short_name = 'W'
         self.channels = 3
@@ -247,12 +241,12 @@ class ImprovedWhiteBalanceFilter(Filter):
                                        0.06 * color_scaling[:, 2])[:, None]
         return color_scaling
 
-    def process(self, img, param, defog, IcA):
+    def process(self, img, param, dedark_A, IcA):
         return img * param[:, :, None, None]
 
 
 class ToneFilter(Filter):
-    def __init__(self,cfg):
+    def __init__(self, cfg):
         super().__init__(cfg)
         self.curve_steps = cfg.curve_steps
         self.short_name = 'T'
@@ -265,7 +259,7 @@ class ToneFilter(Filter):
         tone_curve = tanh_range(*self.cfg.tone_curve_range)(tone_curve)
         return tone_curve
 
-    def process(self, img, param, defog, IcA):
+    def process(self, img, param, dedark, IcA):
         # img = tf.minimum(img, 1.0)
         tone_curve = param
         tone_curve_sum = torch.sum(tone_curve, dim=4) + 1e-30
@@ -288,7 +282,7 @@ class ContrastFilter(Filter):
     def filter_param_regressor(self, features):
         return torch.tanh(features)
 
-    def process(self, img, param, defog, IcA):
+    def process(self, img, param, dedark_A, IcA):
         luminance = torch.clamp(rgb2lum(img), 0.0, 1.0)
         # luminance = torch.minimum(torch.maximum(rgb2lum(img), 0.0), 1.0)
         contrast_lum = -torch.cos(math.pi * luminance) * 0.5 + 0.5
