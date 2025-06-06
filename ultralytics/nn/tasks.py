@@ -339,7 +339,6 @@ class DetectionModel(BaseModel):
         y[-1] = y[-1][..., i:]  # small
         return y
 
-    # 重写了BaseModel的init_criterion()
     def init_criterion(self):
         return RcoveryDetectionLoss(self)
         # return v8DetectionLoss(self)

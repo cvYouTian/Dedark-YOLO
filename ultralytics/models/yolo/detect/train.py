@@ -82,12 +82,13 @@ class DetectionTrainer(BaseTrainer):
         """Preprocesses a batch of images by scaling and converting to float."""
         batch['clean_img'] = batch['img'].to(self.device, non_blocking=True).float() / 255
 
-        if hasattr(self.args, 'dedark_FLAG') and self.args.dedark_FLAG:
+        if hasattr(self.args, 'dedark_FLAG') and self.args.dedark_FLAG and self.args.lowlight_FLAG:
             batch_size = batch['clean_img'].shape[0]
             height = batch['clean_img'].shape[2]
             width = batch['clean_img'].shape[3]
 
-            # Convert from PyTorch tensor (BCHW) to numpy (BHWC) for processing
+            batch["clean_img"] = torch.pow(batch["clean_img"], self.args.dark_param)
+
             clean_imgs_np = (batch['clean_img'].permute(0, 2, 3, 1).cpu().numpy() * 255).astype(np.uint8)
 
             # Initialize arrays like in the first file

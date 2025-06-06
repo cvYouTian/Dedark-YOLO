@@ -203,13 +203,12 @@ class DeDarkFilter(Filter):
         dedark_A = dedark_A.to(img.device)
         IcA = IcA.to(img.device)
 
-        print('      defog_A:', img.shape)
-        print('      defog_A:', IcA.shape)
-        print('      defog_A:', dedark_A.shape)
-        print(f"     param shape : {param.shape}")
+        # print('      defog_A:', img.shape)
+        # print('      defog_A:', IcA.shape)
+        # print('      defog_A:', dedark_A.shape)
+        # print(f"     param shape : {param.shape}")
 
         tx = 1 - param[:, :, None, None] * IcA
-        # tx = 1 - 0.5*IcA
 
         tx_1 = tx.repeat(1, 3, 1, 1)
         result = (img - dedark_A[:, :, None, None]) / torch.clamp(tx_1, min=0.01) + dedark_A[:, :, None, None,]
@@ -248,7 +247,6 @@ class ImprovedWhiteBalanceFilter(Filter):
         log_wb_range = 0.5
         # mask = np.array(((0, 1, 1)), dtype=np.float32).reshape(1, 3)
         mask = torch.tensor([[0, 1, 1]], dtype=torch.float32, device=features.device)
-        print(f" Mask shape ： {mask.shape}")
         assert mask.shape == (1, 3)
         features = features * mask
         color_scaling = torch.exp(tanh_range(-log_wb_range, log_wb_range)(features))

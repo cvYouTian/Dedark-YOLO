@@ -1,5 +1,4 @@
 from easydict import EasyDict as edict
-# from .filters import UsmFilter, GammaFilter, ImprovedWhiteBalanceFilter, ContrastFilter, ToneFilter
 from .filtersB import DeDarkFilter, UsmFilter, GammaFilter, ImprovedWhiteBalanceFilter, ContrastFilter, ToneFilter
 import argparse
 
@@ -66,11 +65,11 @@ cfg.feature_extractor_dims = 4096
 DD = DeDarkFilter(cfg)
 WB = ImprovedWhiteBalanceFilter(cfg)
 GF = GammaFilter(cfg)
-TF = ToneFilter(cfg)
+# TF = ToneFilter(cfg)
 CF = ContrastFilter(cfg)
 S = UsmFilter(cfg)
 
 # no dedark
 # cfg.filters = [WB, GF, TF, CF, S]
 
-cfg.filters = [DD, WB, GF, TF, CF, S]
+cfg.filters = [DD, WB, GF,  CF, S]
