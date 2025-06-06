@@ -167,9 +167,6 @@ class UsmFilter(Filter):
             return torch.unsqueeze(k, 1) * k
 
         kernel_i = make_gaussian_2d_kernel(5)
-        # print('kernel_i.shape', kernel_i.shape)
-        # kernel_i = kernel_i.unsqueeze(0).unsqueeze(1).repeat(1, 1, 1, 1).to("cuda:0")
-        # kernel_i = kernel_i.unsqueeze(0).unsqueeze(1).to("cuda")
         kernel_i = kernel_i.unsqueeze(0).unsqueeze(1).to(img.device)
 
         pad_w = (25 - 1) // 2

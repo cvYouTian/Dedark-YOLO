@@ -109,7 +109,6 @@ class BaseModel(nn.Module):
             else:
                 x = m(x)
 
-            x = m(x)   # run
             y.append(x if m.i in self.save else None)
             if visualize:
                 feature_visualization(x, m.type, m.i, save_dir=visualize)

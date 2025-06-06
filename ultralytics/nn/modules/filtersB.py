@@ -151,29 +151,28 @@ class UsmFilter(Filter):
     def filter_param_regressor(self, features):
         return tanh_range(*self.cfg.usm_range)(features)
 
-    def process(self, img, param, dedark_A, IcA):
+    def process(self, img, param, dedark_A=None, IcA=None):
         def make_gaussian_2d_kernel(sigma, dtype=torch.float32):
             radius = 12
-            x = torch.cast(-radius, radius + 1, dtype=dtype)
+            # x = torch.cast(-radius, radius + 1, dtype=dtype)
+            x = x = torch.arange(-radius, radius + 1, dtype=dtype)
             k = torch.exp(-0.5 * torch.square(x / sigma))
-            k = k / torch.reduce_sum(k)
-            return torch.expand_dims(k, 1) * k
+            k = k / torch.sum(k)
+            return torch.unsqueeze(k, 1) * k
 
         kernel_i = make_gaussian_2d_kernel(5)
-        # print('kernel_i.shape', kernel_i.shape)
         kernel_i = kernel_i.unsqueeze(0).unsqueeze(1).to(img.device)
 
         pad_w = (25 - 1) // 2
         padded = F.pad(img, (pad_w, pad_w, pad_w, pad_w), mode='reflect')
         outputs = []
         for channel_idx in range(3):
-            data_c = padded[:, :, :, channel_idx:(channel_idx + 1)]
+            data_c = padded[:, channel_idx:(channel_idx + 1), :, :].to(img.device)
             data_c = F.conv2d(data_c, kernel_i, stride=1)
             outputs.append(data_c)
         output = torch.cat(outputs, dim=1)
         img_out = (img - output) * param[:, :, None, None] + img
         return img_out
-
 
 
 class DeDarkFilter(Filter):
@@ -188,15 +187,34 @@ class DeDarkFilter(Filter):
         return tanh_range(*self.cfg.defog_range)(features)
 
     def process(self, img, param, dedark_A=None, IcA=None):
+        """
+         处理去雾，添加None值检查
+
+         Args:
+             img: 输入图像 [B, C, H, W]
+             param: 滤波器参数 [B, 1]
+             dedark_A: 大气光强度 [B, 3]
+             IcA: 暗通道信息 [B, 1, H, W]
+        """
+        if dedark_A is None or IcA is None:
+            print(" Warning : dedark_A or IcA is None, returning original image")
+            return img
+
+        dedark_A = dedark_A.to(img.device)
+        IcA = IcA.to(img.device)
+
         print('      defog_A:', img.shape)
         print('      defog_A:', IcA.shape)
         print('      defog_A:', dedark_A.shape)
+        print(f"     param shape : {param.shape}")
 
         tx = 1 - param[:, :, None, None] * IcA
         # tx = 1 - 0.5*IcA
 
-        tx_1 = torch.tile(tx, [1, 1, 1, 3])
-        return (img - dedark_A[:, :, None, None]) / torch.clamp(tx_1, min=0.01) + dedark_A[:, :, None, None,]
+        tx_1 = tx.repeat(1, 3, 1, 1)
+        result = (img - dedark_A[:, :, None, None]) / torch.clamp(tx_1, min=0.01) + dedark_A[:, :, None, None,]
+
+        return result
 
 
 class GammaFilter(Filter):  # gamma_param is in [-gamma_range, gamma_range]
@@ -211,7 +229,7 @@ class GammaFilter(Filter):  # gamma_param is in [-gamma_range, gamma_range]
         log_gamma_range = np.log(self.cfg.gamma_range)
         return torch.exp(tanh_range(-log_gamma_range, log_gamma_range)(features))
 
-    def process(self, img, param, dedark_A, IcA):
+    def process(self, img, param, dedark_A=None, IcA=None):
         param_1 = param.repeat(1, 3)
         return torch.pow(torch.clamp(img, 0.0001), param_1[:, :, None, None])
         # return img
@@ -228,20 +246,18 @@ class ImprovedWhiteBalanceFilter(Filter):
 
     def filter_param_regressor(self, features):
         log_wb_range = 0.5
-        mask = np.array(((0, 1, 1)), dtype=np.float32).reshape(1, 3)
-        # mask = np.array(((1, 0, 1)), dtype=np.float32).reshape(1, 3)
-        print(mask.shape)
+        # mask = np.array(((0, 1, 1)), dtype=np.float32).reshape(1, 3)
+        mask = torch.tensor([[0, 1, 1]], dtype=torch.float32, device=features.device)
+        print(f" Mask shape ： {mask.shape}")
         assert mask.shape == (1, 3)
         features = features * mask
         color_scaling = torch.exp(tanh_range(-log_wb_range, log_wb_range)(features))
-        # There will be no division by zero here unless the WB range lower bound is 0
-        # normalize by luminance
-        color_scaling *= 1.0 / (
+        color_scaling = color_scaling * 1.0 / (
                                        1e-5 + 0.27 * color_scaling[:, 0] + 0.67 * color_scaling[:, 1] +
                                        0.06 * color_scaling[:, 2])[:, None]
         return color_scaling
 
-    def process(self, img, param, dedark_A, IcA):
+    def process(self, img, param, dedark_A=None, IcA=None):
         return img * param[:, :, None, None]
 
 
@@ -259,15 +275,15 @@ class ToneFilter(Filter):
         tone_curve = tanh_range(*self.cfg.tone_curve_range)(tone_curve)
         return tone_curve
 
-    def process(self, img, param, dedark, IcA):
+    def process(self, img, param, dedark=None, IcA=None):
         # img = tf.minimum(img, 1.0)
         tone_curve = param
         tone_curve_sum = torch.sum(tone_curve, dim=4) + 1e-30
         total_image = img * 0
         for i in range(self.cfg.curve_steps):
-            total_image += torch.clamp(img - 1.0 * i / self.cfg.curve_steps, 0, 1.0 / self.cfg.curve_steps) \
+            total_image = total_image + torch.clamp(img - 1.0 * i / self.cfg.curve_steps, 0, 1.0 / self.cfg.curve_steps) \
                            * param[:, :, :, :, i]
-        total_image *= self.cfg.curve_steps / tone_curve_sum
+        total_image = total_image * self.cfg.curve_steps / tone_curve_sum
         img = total_image
         return img
 
@@ -282,9 +298,8 @@ class ContrastFilter(Filter):
     def filter_param_regressor(self, features):
         return torch.tanh(features)
 
-    def process(self, img, param, dedark_A, IcA):
+    def process(self, img, param, dedark_A=None, IcA=None):
         luminance = torch.clamp(rgb2lum(img), 0.0, 1.0)
-        # luminance = torch.minimum(torch.maximum(rgb2lum(img), 0.0), 1.0)
         contrast_lum = -torch.cos(math.pi * luminance) * 0.5 + 0.5
         contrast_image = img / (luminance + 1e-6) * contrast_lum
         return lerp(img, contrast_image, param[:, :, None, None])
