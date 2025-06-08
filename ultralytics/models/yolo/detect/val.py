@@ -261,9 +261,9 @@ class DetectionValidator(BaseValidator):
 def val(cfg=DEFAULT_CFG, use_python=False):
     """Validate trained YOLO model on validation dataset."""
     # model = cfg.model or 'yolov8n.pt'
-    model = cfg.model or "/home/youtian/Documents/pro/pyCode/easy_YOLOv8/runs/detect/RFB+ASFF/weights/best.pt"
+    model = cfg.model
     # data = cfg.data or 'coco128.yaml'
-    data = cfg.data or "/home/youtian/Documents/pro/pyCode/easy_YOLOv8/ultralytics/cfg/datasets/HSTS6.yaml"
+    data = cfg.data
 
     args = dict(model=model, data=data)
     if use_python:

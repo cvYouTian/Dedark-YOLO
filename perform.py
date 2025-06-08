@@ -176,18 +176,20 @@ def FLOPs_Para4pt():
 def predict():
     # Load a model
     # model = YOLO('yolov8n.pt')  # 加载官方的模型权重作评估
-    model = YOLO("/home/youtian/Documents/pro/pyCode/easy_YOLOv8/runs/detect/RFB+ASFF/weights/best.pt")  # 加载自定义的模型权重作评估
+    model = YOLO("/home/youtian/Documents/pro/pyCode/Dedark-YOLO/runs/detect/baseline/weights/best.pt")  # 加载自定义的模型权重作评估
     # metrics = model.val()  # 不需要传参，这里定义的模型会自动在训练的数据集上作评估
-    metrics = model.val(data="/home/youtian/Documents/pro/pyCode/easy_YOLOv8/ultralytics/cfg/datasets/HSTS6.yaml")
+    metrics = model.val(data="/home/youtian/Documents/pro/pyCode/Dedark-YOLO/ultralytics/cfg/datasets/tielu.yaml")
     # 在一个新的数据集上做评估，传绝对路径
-    print(metrics.box.map)  # map50-95
+    print(f"map50-95:{metrics.box.map}")  # map50-95
     print(metrics.box.map50)  # map50
     print(metrics.box.map75)  # map75
+    print(metrics.box.f1s)  # f1 score
     print(metrics.box.maps)  # 包含每个类别的map50-95列表
 
 
 if __name__ == "__main__":
-    train_lowght()
+    # train_lowght()
     # test_img()
+    predict()
     # onnx()
 

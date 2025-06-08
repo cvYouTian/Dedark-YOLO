@@ -186,3 +186,6 @@ model.val(data='dataset/data.yaml', batch=4)
 
 
 # 我在utils/lowlight_process.py文件，用于生成第照度的图片
+# 使用服务器训练完权重之后，在另外的电脑上测试的时候，需要将defult.yaml文件的model和dataset路径的配置新的权重路径和数据集路径（tielu.yaml）,之后执行model/yolo/detect/val.py的程序即可验证
+- 报错：FileNotFoundError: val: No labels found in /home/youtian/Documents/pro/pyCode/datasets/tielu-yolo/labels/test_dark.cache, can not start training. See https://docs.ultralytics.com/yolov5/tutorials/train_custom_data
+- 出现以上的问题，是因为没有生成测试集的cache文件所制。再次运行train.py,生成对应的测试的cache文件即可。

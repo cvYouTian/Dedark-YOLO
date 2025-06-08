@@ -577,6 +577,7 @@ class Metric(SimpleClass):
             mean_results(): Mean of results, returns mp, mr, map50, map.
             class_result(i): Class-aware result, returns p[i], r[i], ap50[i], ap[i].
             maps(): mAP of each class. Returns: Array of mAP scores, shape: (nc,).
+            f1s(): mAP of each class. Return: Array of mAP scores, shape:(nc, )
             fitness(): Model fitness as a weighted combination of metrics. Returns: Float.
             update(results): Update metric attributes with new evaluation results.
 
@@ -631,6 +632,16 @@ class Metric(SimpleClass):
         return self.r.mean() if len(self.r) else 0.0
 
     @property
+    def mf1(self):
+        """
+        Returns the Mean F1 score of all classes.
+
+        Returns:
+            (float): The mean F1 score of all classes.
+        """
+        return self.f1.mean() if len(self.f1) else 0.0
+
+    @property
     def map50(self):
         """
         Returns the mean Average Precision (mAP) at an IoU threshold of 0.5.
@@ -675,6 +686,14 @@ class Metric(SimpleClass):
         for i, c in enumerate(self.ap_class_index):
             maps[c] = self.ap[i]
         return maps
+
+    @property
+    def f1s(self):
+        """F1 score of each class."""
+        f1s = np.zeros(self.nc)
+        for i, c in enumerate(self.ap_class_index):
+            f1s[c] = self.f1[i] if i < len(self.f1) else 0.0
+        return f1s
 
     def fitness(self):
         """Model fitness as a weighted combination of metrics."""
@@ -758,6 +777,13 @@ class DetMetrics(SimpleClass):
     def maps(self):
         """Returns mean Average Precision (mAP) scores per class."""
         return self.box.maps
+
+    @property
+    def f1s(self):
+        """
+        Returns F1 scores per class
+        """
+        return self.box.f1s
 
     @property
     def fitness(self):
