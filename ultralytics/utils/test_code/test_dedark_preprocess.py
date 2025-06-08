@@ -5,20 +5,22 @@ import math
 import matplotlib.pyplot as plt
 from PIL import Image
 import os
+import glob
+from pathlib import Path
 
 
 class MockArgs:
     """Mock arguments class for testing"""
 
-    def __init__(self, fog_FLAG=True):
-        self.fog_FLAG = fog_FLAG
+    def __init__(self, dedark_FLAG=True):
+        self.dedark_FLAG = dedark_FLAG
 
 
 class TestDetectionTrainer:
     """Simplified version of DetectionTrainer for testing preprocess_batch"""
 
-    def __init__(self, fog_FLAG=True):
-        self.args = MockArgs(fog_FLAG)
+    def __init__(self, dedark_FLAG=True):
+        self.args = MockArgs(dedark_FLAG)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.dark_param = 0.7  # Default dark parameter
 
@@ -54,8 +56,7 @@ class TestDetectionTrainer:
         """Preprocesses a batch of images by scaling and converting to float."""
         batch['clean_img'] = batch['img'].to(self.device, non_blocking=True).float() / 255
 
-        # Apply dark channel processing similar to the first file
-        if hasattr(self.args, 'fog_FLAG') and self.args.fog_FLAG:
+        if hasattr(self.args, 'dedark_FLAG') and self.args.dedark_FLAG:
             batch_size = batch['clean_img'].shape[0]
             height = batch['clean_img'].shape[2]
             width = batch['clean_img'].shape[3]
@@ -76,14 +77,14 @@ class TestDetectionTrainer:
                 IcA[i, ...] = IcA_i
 
             # Convert back to PyTorch tensors
-            batch['defog_A'] = torch.from_numpy(defog_A).float().to(self.device)
+            batch['dedark_A'] = torch.from_numpy(defog_A).float().to(self.device)
             batch['IcA'] = torch.from_numpy(np.expand_dims(IcA, axis=-1)).permute(0, 3, 1, 2).float().to(self.device)
 
             # Use the processed image (same as clean_img in this case, following the original logic)
             batch["img"] = batch["clean_img"]
 
         else:
-            # Original processing when fog_FLAG is not set
+            # Original processing when dedark_FLAG is not set
             batch["img"] = torch.pow(batch["clean_img"], self.dark_param)
 
         recover_loss = torch.nn.functional.mse_loss(batch["img"], batch["clean_img"])
@@ -92,40 +93,100 @@ class TestDetectionTrainer:
         return batch
 
 
-def create_test_batch(batch_size=2, height=416, width=416):
-    """Create a test batch with sample images"""
+def check_image_directory(image_dir):
+    """Check if the provided directory exists and contains images"""
+    if not image_dir:
+        return False, "No image directory provided"
 
-    # Method 1: Create synthetic test images
-    def create_synthetic_image(h, w):
-        # Create a more realistic test image with different regions
-        img = np.zeros((h, w, 3), dtype=np.uint8)
+    if not os.path.exists(image_dir):
+        return False, f"Directory '{image_dir}' does not exist"
 
-        # Add some geometric shapes and gradients
-        # Sky region (top 1/3) - lighter
-        img[:h // 3, :, :] = [180, 200, 220]  # Light blue sky
+    if not os.path.isdir(image_dir):
+        return False, f"'{image_dir}' is not a directory"
 
-        # Middle region - objects
-        img[h // 3:2 * h // 3, :w // 2, :] = [100, 150, 100]  # Green vegetation
-        img[h // 3:2 * h // 3, w // 2:, :] = [120, 100, 80]  # Brown buildings
+    # Check for image files
+    image_extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp', '*.tiff', '*.tif']
+    image_files = []
 
-        # Ground region (bottom 1/3) - darker
-        img[2 * h // 3:, :, :] = [80, 80, 80]  # Dark ground
+    for ext in image_extensions:
+        image_files.extend(glob.glob(os.path.join(image_dir, ext)))
+        image_files.extend(glob.glob(os.path.join(image_dir, ext.upper())))
 
-        # Add some noise for realism
-        noise = np.random.normal(0, 10, (h, w, 3))
-        img = np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
+    if not image_files:
+        return False, f"No image files found in '{image_dir}'"
 
-        return img
+    return True, f"Found {len(image_files)} images in '{image_dir}'"
 
-    # Create batch of images
+
+def load_images_from_directory(image_dir, target_size=(416, 416), max_images=5):
+    """Load real images from a directory"""
+
+    # Support common image formats
+    image_extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp', '*.tiff', '*.tif']
+    image_files = []
+
+    for ext in image_extensions:
+        image_files.extend(glob.glob(os.path.join(image_dir, ext)))
+        image_files.extend(glob.glob(os.path.join(image_dir, ext.upper())))
+
+    if not image_files:
+        print(f"No images found in {image_dir}")
+        return None, []
+
+    print(f"Found {len(image_files)} images in {image_dir}")
+
+    # Limit the number of images to process
+    image_files = image_files[:max_images]
+
     images = []
-    for i in range(batch_size):
-        img = create_synthetic_image(height, width)
-        images.append(img)
+    valid_files = []
+
+    for img_path in image_files:
+        try:
+            # Load image using PIL
+            img_pil = Image.open(img_path).convert('RGB')
+
+            # Resize image
+            img_pil = img_pil.resize(target_size, Image.LANCZOS)
+
+            # Convert to numpy array
+            img_np = np.array(img_pil)
+
+            images.append(img_np)
+            valid_files.append(img_path)
+
+            print(f"✓ Loaded: {os.path.basename(img_path)} - Shape: {img_np.shape}")
+
+        except Exception as e:
+            print(f"✗ Error loading {img_path}: {e}")
+
+    if not images:
+        return None, []
+
+    return np.stack(images), valid_files
+
+
+def create_test_batch_from_images(image_dir, target_size=(416, 416), max_images=5):
+    """Create a test batch from real images in the specified directory"""
+
+    # Check if directory is valid
+    is_valid, message = check_image_directory(image_dir)
+    if not is_valid:
+        raise ValueError(f"❌ {message}")
+
+    print(f"📁 Loading images from: {image_dir}")
+
+    # Load images from directory
+    images_np, image_files = load_images_from_directory(image_dir, target_size, max_images)
+
+    if images_np is None or len(images_np) == 0:
+        raise ValueError(f"❌ No valid images could be loaded from {image_dir}")
+
+    batch_size = len(images_np)
+    print(f"✅ Successfully loaded {batch_size} images")
 
     # Convert to PyTorch tensor (BCHW format)
-    images_np = np.stack(images)  # (B, H, W, C)
-    images_tensor = torch.from_numpy(images_np).permute(0, 3, 1, 2).float()  # (B, C, H, W)
+    images_tensor = torch.from_numpy(images_np).permute(0, 3, 1, 2).float()
 
     # Create mock batch dict
     batch = {
@@ -133,7 +194,7 @@ def create_test_batch(batch_size=2, height=416, width=416):
         'batch_idx': torch.arange(batch_size),
         'cls': torch.zeros((batch_size, 1)),
         'bboxes': torch.zeros((batch_size, 4)),
-        'im_file': [f'test_image_{i}.jpg' for i in range(batch_size)]
+        'im_file': image_files
     }
 
     return batch
@@ -150,9 +211,12 @@ def visualize_results(original_batch, processed_batch, save_dir='test_output'):
     for i in range(batch_size):
         fig, axes = plt.subplots(2, 3, figsize=(15, 10))
 
+        # Get image filename for title
+        img_name = os.path.basename(original_batch['im_file'][i])
+        fig.suptitle(f'Image: {img_name}', fontsize=16)
+
         # Original image
-        orig_img = original_batch['img'][i].permute(1, 2, 0).cpu().numpy()
-        orig_img = np.clip(orig_img / 255.0, 0, 1)
+        orig_img = original_batch['img'][i].permute(1, 2, 0).cpu().numpy().astype(np.uint8)
         axes[0, 0].imshow(orig_img)
         axes[0, 0].set_title('Original Image')
         axes[0, 0].axis('off')
@@ -172,19 +236,20 @@ def visualize_results(original_batch, processed_batch, save_dir='test_output'):
         axes[0, 2].axis('off')
 
         # Show atmospheric light values if available
-        if 'defog_A' in processed_batch:
-            defog_A = processed_batch['defog_A'][i].cpu().numpy()
-            axes[1, 0].bar(['R', 'G', 'B'], defog_A, color=['red', 'green', 'blue'])
-            axes[1, 0].set_title(f'Atmospheric Light\nR:{defog_A[0]:.3f}, G:{defog_A[1]:.3f}, B:{defog_A[2]:.3f}')
+        if 'dedark_A' in processed_batch:
+            dedark_A = processed_batch['dedark_A'][i].cpu().numpy()
+            axes[1, 0].bar(['R', 'G', 'B'], dedark_A, color=['red', 'green', 'blue'])
+            axes[1, 0].set_title(f'Atmospheric Light\nR:{dedark_A[0]:.3f}, G:{dedark_A[1]:.3f}, B:{dedark_A[2]:.3f}')
+            axes[1, 0].set_ylim(0, max(dedark_A) * 1.2)
 
             # Show IcA (dark channel)
             IcA = processed_batch['IcA'][i, 0].cpu().numpy()
             im = axes[1, 1].imshow(IcA, cmap='gray')
             axes[1, 1].set_title('Dark Channel (IcA)')
             axes[1, 1].axis('off')
-            plt.colorbar(im, ax=axes[1, 1])
+            plt.colorbar(im, ax=axes[1, 1], fraction=0.046)
         else:
-            axes[1, 0].text(0.5, 0.5, 'No fog processing\n(fog_FLAG=False)',
+            axes[1, 0].text(0.5, 0.5, 'No dedark processing\n(dedark_FLAG=False)',
                             ha='center', va='center', transform=axes[1, 0].transAxes)
             axes[1, 0].axis('off')
             axes[1, 1].axis('off')
@@ -197,56 +262,115 @@ def visualize_results(original_batch, processed_batch, save_dir='test_output'):
         axes[1, 2].axis('off')
 
         plt.tight_layout()
-        plt.savefig(f'{save_dir}/test_result_image_{i}.png', dpi=150, bbox_inches='tight')
+
+        # Save with a more descriptive filename
+        safe_name = img_name.replace('.', '_').replace('/', '_')
+        output_file = f'{save_dir}/result_{safe_name}.png'
+        plt.savefig(output_file, dpi=150, bbox_inches='tight')
+        print(f"Saved visualization: {output_file}")
         plt.show()
 
 
-def run_test():
-    """Run the complete test"""
-    print("=" * 50)
-    print("Testing preprocess_batch function")
-    print("=" * 50)
+def run_test(image_dir):
+    """Run the complete test with your local images"""
 
-    # Test with fog processing enabled
-    print("\n1. Testing with fog_FLAG=True")
-    trainer_fog = TestDetectionTrainer(fog_FLAG=True)
+    if not image_dir:
+        print("❌ Error: You must provide an image directory!")
+        print("\n📋 Usage Instructions:")
+        print("   run_test('path/to/your/images')")
+        print("\n📁 Examples:")
+        print("   run_test('./my_images')           # Relative path")
+        print("   run_test('/home/user/Pictures')   # Linux absolute path")
+        print("   run_test('C:/Users/user/Pictures') # Windows absolute path")
+        print("\n📸 Supported formats: JPG, JPEG, PNG, BMP, TIFF")
+        return None, None
 
-    # Create test batch
-    test_batch = create_test_batch(batch_size=2, height=256, width=256)
-    print(f"Created test batch with shape: {test_batch['img'].shape}")
+    print("=" * 60)
+    print("Testing preprocess_batch function with YOUR IMAGES")
+    print("=" * 60)
+    print(f"📂 Image directory: {image_dir}")
+
+    try:
+        # Create test batch from your local images
+        test_batch = create_test_batch_from_images(image_dir, target_size=(512, 512), max_images=5)
+        print(f"📊 Created test batch with shape: {test_batch['img'].shape}")
+        print(f"📂 Processing {len(test_batch['im_file'])} images:")
+        for i, file_path in enumerate(test_batch['im_file']):
+            print(f"   {i + 1}. {os.path.basename(file_path)}")
+
+    except ValueError as e:
+        print(f"\n{e}")
+        print("\n💡 Tips:")
+        print("   - Make sure the directory path is correct")
+        print("   - Check that the directory contains image files")
+        print("   - Supported formats: JPG, JPEG, PNG, BMP, TIFF")
+        return None, None
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
+        return None, None
+
+    # Test with dedark processing enabled
+    print("\n🔍 1. Testing with dedark_FLAG=True")
+    trainer_dedark = TestDetectionTrainer(dedark_FLAG=True)
 
     # Process the batch
-    processed_batch_fog = trainer_fog.preprocess_batch(test_batch.copy())
+    processed_batch_dedark = trainer_dedark.preprocess_batch(test_batch.copy())
 
     # Print results
-    print(f"Original image range: [{test_batch['img'].min():.3f}, {test_batch['img'].max():.3f}]")
+    print(f"📈 Original image range: [{test_batch['img'].min():.3f}, {test_batch['img'].max():.3f}]")
     print(
-        f"Clean image range: [{processed_batch_fog['clean_img'].min():.3f}, {processed_batch_fog['clean_img'].max():.3f}]")
-    print(f"Processed image range: [{processed_batch_fog['img'].min():.3f}, {processed_batch_fog['img'].max():.3f}]")
+        f"📈 Clean image range: [{processed_batch_dedark['clean_img'].min():.3f}, {processed_batch_dedark['clean_img'].max():.3f}]")
+    print(
+        f"📈 Processed image range: [{processed_batch_dedark['img'].min():.3f}, {processed_batch_dedark['img'].max():.3f}]")
 
-    if 'defog_A' in processed_batch_fog:
-        print(f"Atmospheric light shape: {processed_batch_fog['defog_A'].shape}")
-        print(f"IcA shape: {processed_batch_fog['IcA'].shape}")
-        print(f"Atmospheric light values (first image): {processed_batch_fog['defog_A'][0].cpu().numpy()}")
+    if 'dedark_A' in processed_batch_dedark:
+        print(f"🌫️ Atmospheric light shape: {processed_batch_dedark['dedark_A'].shape}")
+        print(f"🌫️ IcA shape: {processed_batch_dedark['IcA'].shape}")
+        print("🌫️ Atmospheric light values for each image:")
+        for i, img_file in enumerate(test_batch['im_file']):
+            A_values = processed_batch_dedark['dedark_A'][i].cpu().numpy()
+            print(f"   {os.path.basename(img_file)}: R={A_values[0]:.3f}, G={A_values[1]:.3f}, B={A_values[2]:.3f}")
 
-    print(f"Recovery loss: {processed_batch_fog['recovery_loss_batch'].item():.6f}")
+    print(f"💰 Recovery loss: {processed_batch_dedark['recovery_loss_batch'].item():.6f}")
 
-    # Test with fog processing disabled
-    print("\n2. Testing with fog_FLAG=False")
-    trainer_no_fog = TestDetectionTrainer(fog_FLAG=False)
-    processed_batch_no_fog = trainer_no_fog.preprocess_batch(test_batch.copy())
+    # Test with dedark processing disabled
+    print("\n🔍 2. Testing with dedark_FLAG=False")
+    trainer_no_dedark = TestDetectionTrainer(dedark_FLAG=False)
+    processed_batch_no_dedark = trainer_no_dedark.preprocess_batch(test_batch.copy())
 
-    print(f"Recovery loss (no fog): {processed_batch_no_fog['recovery_loss_batch'].item():.6f}")
-    print(f"Has defog_A: {'defog_A' in processed_batch_no_fog}")
-    print(f"Has IcA: {'IcA' in processed_batch_no_fog}")
+    print(f"💰 Recovery loss (no dedark): {processed_batch_no_dedark['recovery_loss_batch'].item():.6f}")
+    print(f"❓ Has dedark_A: {'dedark_A' in processed_batch_no_dedark}")
+    print(f"❓ Has IcA: {'IcA' in processed_batch_no_dedark}")
 
     # Visualize results
-    print("\n3. Generating visualizations...")
-    visualize_results(test_batch, processed_batch_fog, 'test_output_fog')
-    visualize_results(test_batch, processed_batch_no_fog, 'test_output_no_fog')
+    print("\n🎨 3. Generating visualizations...")
+    visualize_results(test_batch, processed_batch_dedark, 'test_output_dedark')
+    visualize_results(test_batch, processed_batch_no_dedark, 'test_output_no_dedark')
 
-    print("\nTest completed! Check the generated images in test_output_fog/ and test_output_no_fog/ directories.")
+    print("\n✅ Test completed!")
+    print("📁 Check the generated images in:")
+    print("   - test_output_dedark/ (with dedark processing)")
+    print("   - test_output_no_dedark/ (without dedark processing)")
+
+    return processed_batch_dedark, processed_batch_no_dedark
 
 
 if __name__ == "__main__":
-    run_test()
+    # Instructions and examples
+    print("🖼️  Real Image Processing Test")
+    print("=" * 50)
+    print("This script processes YOUR local images for testing dedark preprocessing.")
+    print("\n📋 Usage:")
+    print("   python script.py")
+    print("   Then call: run_test('path/to/your/images')")
+    print("\n📁 Examples:")
+    print("   run_test('./test_images')              # Relative path")
+    print("   run_test('/home/user/Pictures')        # Linux")
+    print("   run_test('C:/Users/user/Pictures')     # Windows")
+    print("   run_test('/Users/user/Pictures')       # macOS")
+    print("\n📸 Supported formats: JPG, JPEG, PNG, BMP, TIFF")
+    print("\n💡 To run the test, call:")
+    print("   run_test('YOUR_IMAGE_DIRECTORY_PATH')")
+
+    # Example - uncomment and modify the path below to test with your images:
+    run_test('/home/youtian/Documents/pro/pyCode/Dedark-YOLO/ultralytics/utils/test_code/sample_images')

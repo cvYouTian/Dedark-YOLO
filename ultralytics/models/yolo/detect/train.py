@@ -38,17 +38,6 @@ class DetectionTrainer(BaseTrainer):
         workers = self.args.workers if mode == 'train' else self.args.workers * 2
         return build_dataloader(dataset, batch_size, workers, shuffle, rank)  # return dataloader
 
-    # def preprocess_batch(self, batch):
-    #     """Preprocesses a batch of images by scaling and converting to float."""
-    #     batch['clean_img'] = batch['img'].to(self.device, non_blocking=True).float() / 255
-    #     batch["img"] = torch.pow(batch["clean_img"], self.dark_param)
-    #
-    #     # recover_loss = torch.sum((batch["img"] - batch["clean_img"]) ** 2)
-    #     recover_loss = F.mse_loss(batch["img"], batch["clean_img"])
-    #     batch["recovery_loss_batch"] = recover_loss
-    #
-    #     return batch
-    #
 
     def DarkChannel(self, im):
         b, g, r = cv2.split(im)
