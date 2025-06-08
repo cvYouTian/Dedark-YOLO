@@ -6,6 +6,7 @@ filtered_images
 checkpoints/
 # C extensions
 *.so
+utils/test_code/
 pytorch_file/Graph-of-Paper/
 .idea/
 *.png
