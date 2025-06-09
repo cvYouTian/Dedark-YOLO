@@ -659,7 +659,7 @@ class Metric(SimpleClass):
         Returns:
             (float): The mAP50 at an IoU threshold of 0.75.
         """
-        return self.all_ap[:, 5].mean() if len(self.all_ap) else 0.0
+        return self.all_ap[:, 5] if len(self.all_ap) else 0.0
 
     @property
     def map(self):

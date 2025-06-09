@@ -1,3 +1,7 @@
+from typing import Union, List, Optional, Tuple
+from tqdm import tqdm
+import json
+from datetime import datetime
 import shutil
 import sys
 import os
@@ -7,7 +11,6 @@ from typing import Union
 import cv2
 import netron
 import time
-import numpy as np
 from ultralytics import YOLO
 
 os.environ["WANDB_MODE"] = "offline"  # 离线模式
@@ -99,37 +102,247 @@ def test_video():
     out.release()
 
 
+
+
 def test_folders(
-        model_path: str = "/home/youtian/Documents/pro/pyCode/easy_YOLOv8/runs/detect/YOLOv8l+CHST6+32/weights/best.pt",
-        srcpath: str = "/home/youtian/Documents/pro/pyCode/datasets/HSTS6/CHTS6/images/val",
-        mothed: str = "YOLO") -> None:
-    # 加载权重model
-    if not isinstance(model_path, Path):
-        model_path = Path(model_path)
-    # if mothed.lower() == "rtdetr":
-    #     model = RTDETR(str(model_path))
-    else:
-        model = YOLO(model_path)
+        model_path: Union[
+            str, Path] = "/home/youtian/Documents/pro/pyCode/easy_YOLOv8/runs/detect/YOLOv8l+CHST6+32/weights/best.pt",
+        srcpath: Union[str, Path] = "/home/youtian/Documents/pro/pyCode/datasets/HSTS6/CHTS6/images/val",
+        method: str = "YOLO",
+        output_size: Tuple[int, int] = (640, 640),
+        confidence_threshold: float = 0.25,
+        save_txt: bool = False,
+        save_json: bool = True,
+        supported_formats: List[str] = None
+) -> dict:
+    """
+    优化的批量图片检测函数
 
-    src = Path(srcpath) if not isinstance(srcpath, Path) else srcpath
-    dst_folder = Path(sys.path[0]) / Path(f"{model_path.parts[-3]}_val_test_pic")
+    Args:
+        model_path: 模型权重文件路径
+        srcpath: 源图片文件夹路径
+        method: 检测方法 ("YOLO" 或 "RTDETR")
+        output_size: 输出图片尺寸 (width, height)
+        confidence_threshold: 置信度阈值
+        save_txt: 是否保存txt格式的检测结果
+        save_json: 是否保存json格式的检测结果
+        supported_formats: 支持的图片格式列表
+
+    Returns:
+        dict: 包含检测统计信息的字典
+    """
+
+    # 默认支持的图片格式
+    if supported_formats is None:
+        supported_formats = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp']
+
+    # 路径处理
+    model_path = Path(model_path)
+    src_path = Path(srcpath)
+
+    # 验证路径
+    if not model_path.exists():
+        raise FileNotFoundError(f"模型文件不存在: {model_path}")
+    if not src_path.exists():
+        raise FileNotFoundError(f"源文件夹不存在: {src_path}")
+
+    # 加载模型
+    print(f"正在加载模型: {model_path}")
+    try:
+        if method.lower() == "rtdetr":
+            # model = RTDETR(str(model_path))  # 如果需要支持RTDETR
+            raise NotImplementedError("RTDETR support not implemented yet")
+        else:
+            model = YOLO(model_path)
+            model.conf = confidence_threshold  # 设置置信度阈值
+    except Exception as e:
+        raise RuntimeError(f"模型加载失败: {e}")
+
+    # 创建输出文件夹
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_name = model_path.parts[-3] if len(model_path.parts) >= 3 else model_path.stem
+    dst_folder = Path(sys.path[0]) / f"{model_name}_test_results_{timestamp}"
+
+    # 清理并创建输出文件夹
     if dst_folder.exists():
-        shutil.rmtree(dst_folder) if any(dst_folder.iterdir()) else dst_folder.rmdir()
-    dst_folder.mkdir(exist_ok=True, parents=True)
-    timer = 0
-    for img_path in src.iterdir():
-        start_timer = time.time()
-        res = model(cv2.imread(str(img_path)))
-        end_timer = time.time()
-        timer += end_timer - start_timer
+        shutil.rmtree(dst_folder)
+    dst_folder.mkdir(parents=True)
 
-        img = res[0].plot()
-        # 把测试的图片提前resize成相同的size
-        ann = cv2.resize(img, (640, 640))
-        cv2.imwrite(str(Path(dst_folder) / Path(img_path.name)), ann)
+    # 创建子文件夹
+    images_folder = dst_folder / "images"
+    images_folder.mkdir()
 
-    # 计算每一张的推理时间
-    print("test time : %f" % (timer / len(list(src.iterdir()))))
+    if save_txt:
+        labels_folder = dst_folder / "labels"
+        labels_folder.mkdir()
+
+    # 获取所有图片文件
+    image_files = []
+    for fmt in supported_formats:
+        image_files.extend(src_path.glob(f"*{fmt}"))
+        image_files.extend(src_path.glob(f"*{fmt.upper()}"))
+
+    if not image_files:
+        raise ValueError(f"在 {src_path} 中未找到支持的图片文件")
+
+    print(f"找到 {len(image_files)} 张图片")
+
+    # 初始化统计变量
+    total_time = 0
+    successful_detections = 0
+    failed_detections = 0
+    detection_results = []
+
+    # 批量处理图片
+    with tqdm(image_files, desc="处理图片", unit="张") as pbar:
+        for img_path in pbar:
+            try:
+                # 记录开始时间
+                start_time = time.time()
+
+                # 读取图片
+                img = cv2.imread(str(img_path))
+                if img is None:
+                    print(f"警告: 无法读取图片 {img_path}")
+                    failed_detections += 1
+                    continue
+
+                # 进行推理
+                results = model(img, verbose=False)  # verbose=False 减少输出
+
+                # 记录结束时间
+                end_time = time.time()
+                inference_time = end_time - start_time
+                total_time += inference_time
+
+                # 处理检测结果
+                result = results[0]
+                annotated_img = result.plot()
+
+                # 调整图片尺寸
+                resized_img = cv2.resize(annotated_img, output_size)
+
+                # 保存标注图片
+                output_img_path = images_folder / img_path.name
+                cv2.imwrite(str(output_img_path), resized_img)
+
+                # 保存检测结果 (txt格式)
+                if save_txt and hasattr(result, 'boxes') and result.boxes is not None:
+                    txt_path = labels_folder / f"{img_path.stem}.txt"
+                    save_detection_txt(result, txt_path, img.shape)
+
+                # 收集统计信息
+                detection_info = {
+                    'filename': img_path.name,
+                    'inference_time': inference_time,
+                    'detection_count': len(result.boxes) if result.boxes is not None else 0,
+                    'image_size': img.shape[:2],
+                    'confidences': result.boxes.conf.tolist() if result.boxes is not None else []
+                }
+                detection_results.append(detection_info)
+
+                successful_detections += 1
+
+                # 更新进度条信息
+                avg_time = total_time / successful_detections if successful_detections > 0 else 0
+                pbar.set_postfix({
+                    'avg_time': f"{avg_time:.3f}s",
+                    'detections': len(result.boxes) if result.boxes is not None else 0
+                })
+
+            except Exception as e:
+                print(f"处理图片 {img_path} 时出错: {e}")
+                failed_detections += 1
+                continue
+
+    # 计算统计信息
+    avg_inference_time = total_time / successful_detections if successful_detections > 0 else 0
+    total_detections = sum(info['detection_count'] for info in detection_results)
+
+    # 统计结果
+    stats = {
+        'model_path': str(model_path),
+        'source_path': str(src_path),
+        'output_path': str(dst_folder),
+        'timestamp': timestamp,
+        'total_images': len(image_files),
+        'successful_detections': successful_detections,
+        'failed_detections': failed_detections,
+        'total_inference_time': total_time,
+        'average_inference_time': avg_inference_time,
+        'total_objects_detected': total_detections,
+        'confidence_threshold': confidence_threshold,
+        'output_size': output_size,
+        'detection_details': detection_results
+    }
+
+    # 保存统计结果
+    if save_json:
+        stats_path = dst_folder / "detection_stats.json"
+        with open(stats_path, 'w', encoding='utf-8') as f:
+            json.dump(stats, f, indent=2, ensure_ascii=False)
+
+    # 打印结果摘要
+    print_detection_summary(stats)
+
+    return stats
+
+
+def save_detection_txt(result, txt_path: Path, img_shape: tuple):
+    """保存检测结果到txt文件 (YOLO格式)"""
+    try:
+        with open(txt_path, 'w') as f:
+            if result.boxes is not None:
+                boxes = result.boxes
+                for i in range(len(boxes)):
+                    cls = int(boxes.cls[i])
+                    conf = float(boxes.conf[i])
+                    x, y, w, h = boxes.xywhn[i].tolist()  # 归一化坐标
+                    f.write(f"{cls} {x:.6f} {y:.6f} {w:.6f} {h:.6f} {conf:.6f}\n")
+    except Exception as e:
+        print(f"保存txt文件失败 {txt_path}: {e}")
+
+
+def print_detection_summary(stats: dict):
+    """打印检测结果摘要"""
+    print("\n" + "=" * 60)
+    print("检测结果摘要")
+    print("=" * 60)
+    print(f"📁 输出文件夹: {stats['output_path']}")
+    print(f"📊 处理统计:")
+    print(f"   • 总图片数: {stats['total_images']}")
+    print(f"   • 成功处理: {stats['successful_detections']}")
+    print(f"   • 处理失败: {stats['failed_detections']}")
+    print(f"   • 成功率: {stats['successful_detections'] / stats['total_images'] * 100:.1f}%")
+
+    print(f"⏱️  性能统计:")
+    print(f"   • 总推理时间: {stats['total_inference_time']:.2f}s")
+    print(f"   • 平均推理时间: {stats['average_inference_time']:.3f}s")
+    print(f"   • 推理速度: {1 / stats['average_inference_time']:.1f} FPS"
+          if stats['average_inference_time'] > 0 else "   • 推理速度: N/A")
+
+    print(f"🎯 检测统计:")
+    print(f"   • 总检测目标数: {stats['total_objects_detected']}")
+    print(f"   • 平均每张图片目标数: {stats['total_objects_detected'] / stats['successful_detections']:.1f}"
+          if stats['successful_detections'] > 0 else "   • 平均每张图片目标数: 0")
+
+    # 置信度统计
+    if stats['detection_details']:
+        all_confidences = []
+        for detail in stats['detection_details']:
+            all_confidences.extend(detail['confidences'])
+
+        if all_confidences:
+            print(f"📈 置信度统计:")
+            print(f"   • 最高置信度: {max(all_confidences):.3f}")
+            print(f"   • 最低置信度: {min(all_confidences):.3f}")
+            print(f"   • 平均置信度: {sum(all_confidences) / len(all_confidences):.3f}")
+
+    print("=" * 60)
+
+
+# 使用示例
+
 
 
 def Para4pt(model):
@@ -347,7 +560,7 @@ def print_detection_metrics_report(detection_results):
 def predict():
     # Load a model
     # model = YOLO('yolov8n.pt')  # 加载官方的模型权重作评估
-    model = YOLO("/home/youtian/Documents/pro/pyCode/Dedark-YOLO/runs/detect/baseline/weights/best.pt")  # 加载自定义的模型权重作评估
+    model = YOLO("/home/youtian/Documents/pro/pyCode/Dedark-YOLO/runs/detect/DedarkDet/weights/best.pt")  # 加载自定义的模型权重作评估
 
     # 定义你的类别名称
     class_names = ['person', 'debrisflow', 'rockfall']
@@ -363,9 +576,17 @@ def predict():
     print("=" * 50)
     print(f"mAP50-95: {metrics.box.map:.4f}")  # map50-95
     print(f"mAP50: {metrics.box.map50:.4f}")  # map50
-    print(f"mAP75: {metrics.box.map75:.4f}")  # map75
-    print(f"F1 scores: {metrics.box.f1s}")  # f1 score
-    print(f"mAPs per class: {metrics.box.maps}")  # 包含每个类别的map50-95列表
+
+    print(f"AP75 per class: person-{metrics.box.map75[0]:.4f},"
+          f" debrisflow-{metrics.box.map75[1]:.4f},"
+          f" rockfall-{metrics.box.map75[2]:.4f}"
+          f" mAP75:{sum(metrics.box.map75) / len(metrics.box.map75)}")  # map75
+
+    print(f"F1 scores: person-{metrics.box.f1s[0]:.4f},"
+          f" debrisflow-{metrics.box.f1s[1]:.4f},"
+          f" rockfall-{metrics.box.f1s[2]:.4f}")  # f1 score
+
+    print(f"mf1: {metrics.box.mf1:.4f}")
 
     # 新增的检出率和漏检率分析
     detection_results = calculate_detection_metrics(metrics, class_names)
@@ -374,86 +595,30 @@ def predict():
     return metrics, detection_results
 
 
-def predict_with_detailed_analysis():
-    """
-    带有详细分析的预测函数，包括漏检率和其他指标的综合分析
-    """
-    # Load a model
-    model = YOLO("/home/youtian/Documents/pro/pyCode/Dedark-YOLO/runs/detect/baseline/weights/best.pt")
-
-    # 定义你的类别名称
-    class_names = ['person', 'debrisflow', 'rockfall']
-
-    # 进行模型验证
-    metrics = model.val(data="/home/youtian/Documents/pro/pyCode/Dedark-YOLO/ultralytics/cfg/datasets/tielu.yaml")
-
-    # 计算检出率和漏检率
-    detection_results = calculate_detection_metrics(metrics, class_names)
-
-    # 综合报告
-    print("\n" + "=" * 70)
-    print("模型性能综合分析报告")
-    print("=" * 70)
-
-    # 基础指标
-    print(f"\n🎯 检测精度指标:")
-    print(f"   mAP@0.5:0.95: {metrics.box.map:.4f}")
-    print(f"   mAP@0.5:     {metrics.box.map50:.4f}")
-    print(f"   mAP@0.75:    {metrics.box.map75:.4f}")
-    print(f"   平均精确率:   {metrics.box.mp:.4f}")
-    print(f"   平均召回率:   {metrics.box.mr:.4f}")
-
-    # 检出率和漏检率指标
-    if detection_results:
-        print(f"\n🎯 检出率指标:")
-        print(
-            f"   总体检出率: {detection_results['overall_detection_rate']:.4f} ({detection_results['overall_detection_rate'] * 100:.2f}%)")
-        print(f"\n🚨 漏检率指标:")
-        print(
-            f"   总体漏检率: {detection_results['overall_miss_rate']:.4f} ({detection_results['overall_miss_rate'] * 100:.2f}%)")
-
-        # 各类别对比
-        print(f"\n📊 各类别性能对比:")
-        print(f"{'类别':<12} {'mAP@0.5':<10} {'召回率':<10} {'检出率':<10} {'漏检率':<10} {'F1':<10}")
-        print("-" * 70)
-
-        for i, class_name in enumerate(class_names):
-            if i < len(metrics.box.maps):
-                map50 = metrics.box.ap50[i] if hasattr(metrics.box, 'ap50') and i < len(metrics.box.ap50) else 0
-                recall = metrics.box.r[i] if hasattr(metrics.box, 'r') and i < len(metrics.box.r) else 0
-                detection_rate = detection_results['class_detection_rates'].get(class_name, 0)
-                miss_rate = detection_results['class_miss_rates'].get(class_name, 0)
-                f1 = metrics.box.f1[i] if hasattr(metrics.box, 'f1') and i < len(metrics.box.f1) else 0
-
-                print(
-                    f"{class_name:<12} {map50:<10.3f} {recall:<10.3f} {detection_rate * 100:<9.1f}% {miss_rate * 100:<9.1f}% {f1:<10.3f}")
-
-    # 性能评估
-    print(f"\n💡 模型评估:")
-    overall_map = metrics.box.map
-    overall_detection_rate = detection_results['overall_detection_rate'] if detection_results else 0
-    overall_miss_rate = detection_results['overall_miss_rate'] if detection_results else 0
-
-    if overall_map > 0.7 and overall_detection_rate > 0.9:
-        print("   ✅ 优秀: 高精度高检出率，模型性能优秀")
-    elif overall_map > 0.5 and overall_detection_rate > 0.8:
-        print("   ⚡ 良好: 精度和检出率都在良好范围")
-    elif overall_miss_rate > 0.3:
-        print("   ⚠️  注意: 漏检率较高，可能影响实际应用")
-    else:
-        print("   📈 需改进: 建议进一步优化模型")
-
-    return metrics, detection_results
-
-
 if __name__ == "__main__":
     # train_lowght()
     # test_img()
 
+#############---predict---##############
+
     # 使用原有的predict函数（包含检出率和漏检率）
-    predict()
+    # predict()
 
     # 或者使用带有详细分析的版本
     # predict_with_detailed_analysis()
 
     # onnx()
+
+#############---test—folder---##############
+    try:
+        # 基础使用
+        stats = test_folders(
+            model_path="/home/youtian/Documents/pro/pyCode/Dedark-YOLO/runs/detect/DedarkDet/weights/best.pt",
+            srcpath="/home/youtian/Documents/pro/pyCode/datasets/tielu-yolo/images/test_dark/",
+            confidence_threshold=0.3,
+            save_txt=True,
+            save_json=True
+        )
+
+    except Exception as e:
+        print(f"错误: {e}")
