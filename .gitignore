@@ -25,6 +25,7 @@ lib/
 lib64/
 parts/
 sdist/
+exp/
 var/
 *.json
 *.onnx

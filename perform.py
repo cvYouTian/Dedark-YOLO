@@ -106,10 +106,10 @@ def test_video():
 
 def test_folders(
         model_path: Union[
-            str, Path] = "/home/youtian/Documents/pro/pyCode/easy_YOLOv8/runs/detect/YOLOv8l+CHST6+32/weights/best.pt",
-        srcpath: Union[str, Path] = "/home/youtian/Documents/pro/pyCode/datasets/HSTS6/CHTS6/images/val",
+            str, Path] = "/home/youtian/best.pt",
+        srcpath: Union[str, Path] = "/home/youtian/val",
         method: str = "YOLO",
-        output_size: Tuple[int, int] = (640, 640),
+        output_size: Tuple[int, int] = (1080, 720),
         confidence_threshold: float = 0.25,
         save_txt: bool = False,
         save_json: bool = True,
@@ -339,9 +339,6 @@ def print_detection_summary(stats: dict):
             print(f"   • 平均置信度: {sum(all_confidences) / len(all_confidences):.3f}")
 
     print("=" * 60)
-
-
-# 使用示例
 
 
 
@@ -614,7 +611,7 @@ if __name__ == "__main__":
         # 基础使用
         stats = test_folders(
             model_path="/home/youtian/Documents/pro/pyCode/Dedark-YOLO/runs/detect/DedarkDet/weights/best.pt",
-            srcpath="/home/youtian/Documents/pro/pyCode/datasets/tielu-yolo/images/test_dark/",
+            srcpath="/home/youtian/Documents/pro/pyCode/Dedark-YOLO/exp/test",
             confidence_threshold=0.3,
             save_txt=True,
             save_json=True
